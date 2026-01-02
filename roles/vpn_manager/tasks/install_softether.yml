@@ -8,9 +8,14 @@
           - libssl-dev
           - libncurses5-dev
           - libncursesw5-dev
+          - zlib1g-dev
           - wget
           - tar
+          - make
+          - gcc
         state: present
+      environment:
+        DEBIAN_FRONTEND: noninteractive
 
     - name: Check if SoftEther is already installed
       stat:
@@ -24,57 +29,103 @@
         mode: '0755'
       when: not softether_installed.stat.exists
 
+    - name: Clean up old downloads
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/vpnserver.tar.gz
+        - /tmp/vpnserver
+      when: not softether_installed.stat.exists
+
     - name: Download SoftEther source
       get_url:
-        url: "{{ softether_url }}"
+        url: "{{ softether_url | default('https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/v4.43-9799-beta-2023.08.31/softether-vpnserver-v4.43-9799-beta-2023.08.31-linux-x64-64bit.tar.gz') }}"
         dest: /tmp/vpnserver.tar.gz
         mode: '0644'
-        timeout: 120
+        timeout: 300
       when: not softether_installed.stat.exists
       retries: 3
-      delay: 5
+      delay: 10
       register: download_result
       until: download_result is succeeded
+
+    - name: Create extraction directory
+      file:
+        path: /tmp/softether_extract
+        state: directory
+        mode: '0755'
+      when: not softether_installed.stat.exists
 
     - name: Extract source
       unarchive:
         src: /tmp/vpnserver.tar.gz
-        dest: /tmp
+        dest: /tmp/softether_extract
         remote_src: true
       when: not softether_installed.stat.exists
 
-    - name: Find extracted directory
-      find:
-        paths: /tmp
-        patterns: 'vpnserver*'
-        file_type: directory
+    - name: Find extracted vpnserver directory
+      shell: find /tmp/softether_extract -maxdepth 2 -type d -name "vpnserver" | head -1
       register: softether_dir
+      changed_when: false
       when: not softether_installed.stat.exists
 
-    - name: Compile SoftEther
+    - name: Set SoftEther source path
+      set_fact:
+        softether_source: "{{ softether_dir.stdout | default('/tmp/softether_extract/vpnserver') }}"
+      when: not softether_installed.stat.exists
+
+    - name: Check Makefile exists
+      stat:
+        path: "{{ softether_source }}/Makefile"
+      register: makefile_check
+      when: not softether_installed.stat.exists
+
+    - name: Compile SoftEther (accept license)
       shell: |
-        cd {{ softether_dir.files[0].path | default('/tmp/vpnserver') }}
-        yes 1 | make
-      args:
-        creates: /opt/vpnserver/vpnserver
-      when: not softether_installed.stat.exists
+        cd {{ softether_source }}
+        echo -e "1\n1\n1" | make
+      when:
+        - not softether_installed.stat.exists
+        - makefile_check.stat.exists | default(false)
       async: 600
-      poll: 10
+      poll: 15
+      register: compile_result
 
-    - name: Copy SoftEther to /opt
-      shell: cp -r {{ softether_dir.files[0].path | default('/tmp/vpnserver') }}/* /opt/vpnserver/
-      args:
-        creates: /opt/vpnserver/vpnserver
+    - name: Copy compiled SoftEther to /opt
+      shell: |
+        cp -r {{ softether_source }}/* /opt/vpnserver/
+        chmod 755 /opt/vpnserver/vpnserver /opt/vpnserver/vpncmd 2>/dev/null || true
       when: not softether_installed.stat.exists
 
-    - name: Set executable permissions
+    - name: Verify SoftEther binaries
+      stat:
+        path: /opt/vpnserver/vpnserver
+      register: vpnserver_binary
+
+    - name: Fail if binaries not found
+      fail:
+        msg: "SoftEther compilation failed - vpnserver binary not found"
+      when: not vpnserver_binary.stat.exists
+
+    - name: Set correct permissions on binaries
       file:
         path: "{{ item }}"
         mode: '0755'
+        owner: root
+        group: root
       loop:
         - /opt/vpnserver/vpnserver
         - /opt/vpnserver/vpncmd
       failed_when: false
+
+    - name: Set correct permissions on directory
+      file:
+        path: /opt/vpnserver
+        mode: '0755'
+        owner: root
+        group: root
+        recurse: yes
 
     - name: Deploy systemd unit
       template:
@@ -92,20 +143,48 @@
         enabled: true
         state: started
 
+    - name: Wait for SoftEther to start
+      wait_for:
+        port: 5555
+        timeout: 30
+      failed_when: false
+
+    - name: Set initial server password
+      shell: |
+        /opt/vpnserver/vpncmd localhost /SERVER /CMD ServerPasswordSet {{ softether_server_password | default('admin') }}
+      when: softether_server_password is defined
+      failed_when: false
+      no_log: true
+
     - name: Allow SoftEther ports
-      ufw:
+      community.general.ufw:
         rule: allow
         port: "{{ item.split('/')[0] }}"
         proto: "{{ item.split('/')[1] | default('tcp') }}"
-      loop: "{{ softether_ports }}"
+      loop: "{{ softether_ports | default(['443/tcp', '992/tcp', '1194/tcp', '5555/tcp']) }}"
       when: ufw_enabled | default(false)
+
+    - name: Get SoftEther version
+      shell: /opt/vpnserver/vpncmd localhost /SERVER /CMD About 2>/dev/null | head -5 || echo "SoftEther installed"
+      register: se_version
+      changed_when: false
+      failed_when: false
 
     - name: Show SoftEther status
       debug:
         msg: |
-          SoftEther VPN Server started successfully!
-          Configure with: /opt/vpnserver/vpncmd
-          Default ports: 443, 992, 1194, 5555
+          SoftEther VPN Server installed successfully!
+          
+          Configure with: sudo /opt/vpnserver/vpncmd localhost /SERVER
+          Default ports: 443 (HTTPS), 992 (SSL), 1194 (OpenVPN), 5555 (SoftEther)
+          
+          Quick setup:
+            1. /opt/vpnserver/vpncmd localhost /SERVER
+            2. ServerPasswordSet (set admin password)
+            3. HubCreate DEFAULT (create hub)
+            4. UserCreate myuser (create user)
+          
+          {{ se_version.stdout }}
 
   rescue:
     - name: Get SoftEther service status
@@ -113,11 +192,27 @@
       register: se_status
       changed_when: false
 
+    - name: Check for vpnserver binary
+      shell: ls -la /opt/vpnserver/ 2>&1 || echo "Directory not found"
+      register: vpnserver_files
+      changed_when: false
+
+    - name: Check compilation logs
+      shell: cat /tmp/softether_extract/vpnserver/*.log 2>/dev/null || echo "No logs found"
+      register: compile_logs
+      changed_when: false
+
     - name: Show debug info
       debug:
         msg: |
           SoftEther service status:
           {{ se_status.stdout }}
+          
+          VPN Server directory:
+          {{ vpnserver_files.stdout }}
+          
+          Compilation logs:
+          {{ compile_logs.stdout }}
 
     - name: SoftEther install failed
       fail:
