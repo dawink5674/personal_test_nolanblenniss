@@ -9,5 +9,10 @@
     that: vpn_type in ['wireguard', 'openvpn', 'softether']
     fail_msg: "vpn_type must be wireguard|openvpn|softether"
 
-- name: Dispatch VPN tasks
-  include_tasks: "{{ 'install_' ~ vpn_type ~ '.yml' if vpn_action == 'install' else 'remove.yml' }}"
+- name: Dispatch VPN install tasks
+  include_tasks: "install_{{ vpn_type }}.yml"
+  when: vpn_action == 'install'
+
+- name: Dispatch VPN removal tasks
+  include_tasks: remove.yml
+  when: vpn_action == 'remove'

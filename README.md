@@ -1,12 +1,13 @@
 # liaison-ansible-mwccdc
 
 ## Quick start
+Run commands from the repo root so `ansible.cfg` is picked up (roles_path + inventory). If you must run elsewhere, set `ANSIBLE_CONFIG=/path/to/ansible.cfg`.
 1) Install collections (cache offline if possible):
 
    ```bash
    ansible-galaxy collection install ansible.posix community.general
    ```
-2) Set inventory (already provided): `inventory/inventory.ini`
+2) Inventory defaults via ansible.cfg to `inventory/inventory.ini` (no `-i` needed unless overriding).
 3) Set vars:
    - Non-secret defaults: `group_vars/all.yml`
    - Secrets: `group_vars/vault.yml` (plaintext until you `ansible-vault encrypt group_vars/vault.yml`)
@@ -15,67 +16,67 @@
 Examples (VPN + non-VPN):
 ```bash
 # WireGuard install
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=wireguard
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=install -e vpn_type=wireguard
 
 # OpenVPN install
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=openvpn
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=install -e vpn_type=openvpn
 
 # SoftEther install (provide password)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=softether -e softether_server_password=REDACTED
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=install -e vpn_type=softether -e softether_server_password=REDACTED
 
 # Remove any VPN stack
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove
 
 # Run everything
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=all
+ansible-playbook playbooks/liaison_main.yml -e tool=all
 
 # Docker engine install
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker
+ansible-playbook playbooks/liaison_main.yml -e tool=docker
 
 # Dockerize selected service (service_key from group_vars/all.yml)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker -e service_key=vpn
+ansible-playbook playbooks/liaison_main.yml -e tool=docker -e service_key=vpn
 
 # Subnet sweep (ping scan)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=subnet -e subnet_cidr=192.168.1.0/24
+ansible-playbook playbooks/liaison_main.yml -e tool=subnet -e subnet_cidr=192.168.1.0/24
 
 # Nmap scan (mode via nmap_type)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=nmap -e nmap_type=aggressive -e nmap_target=10.0.0.0/24
+ansible-playbook playbooks/liaison_main.yml -e tool=nmap -e nmap_type=aggressive -e nmap_target=10.0.0.0/24
 
 # FIM monitor (fim_choice: 1 monitor, 2 list, 3 stop, 4 view)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=fim -e fim_choice=1
+ansible-playbook playbooks/liaison_main.yml -e tool=fim -e fim_choice=1
 
 # NTP chrony configure (hosts must be in ntp_servers/ntp_clients groups)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ntp
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp
 
 # PowerShell install (Ubuntu/Debian)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=powershell
+ansible-playbook playbooks/liaison_main.yml -e tool=powershell
 
 # TShark capture/read/filter
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=tshark -e tshark_action=capture
+ansible-playbook playbooks/liaison_main.yml -e tool=tshark -e tshark_action=capture
 
 # System enumeration
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=system
+ansible-playbook playbooks/liaison_main.yml -e tool=system
 
 # Honeypot (Endlessh)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=honeypot
+ansible-playbook playbooks/liaison_main.yml -e tool=honeypot
 
 # IDS (Suricata)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ids
+ansible-playbook playbooks/liaison_main.yml -e tool=ids
 
 # Remove Docker engine
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker -e docker_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=docker -e docker_action=remove
 
 # Remove Chrony (NTP)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ntp -e ntp_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp -e ntp_action=remove
 
 # Remove PowerShell
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=powershell -e powershell_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=powershell -e powershell_action=remove
 
 # Remove Honeypot (Endlessh)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=honeypot -e honeypot_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=honeypot -e honeypot_action=remove
 
 # Remove IDS (Suricata)
-ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ids -e ids_action=remove
+ansible-playbook playbooks/liaison_main.yml -e tool=ids -e ids_action=remove
 ```
 
 ## Inventory
@@ -95,9 +96,9 @@ Adjust hosts/IPs as needed; keep group names consistent with playbooks.
   ansible-vault encrypt group_vars/vault.yml
   ```
   To run with vault:
-  ```bash
-  ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini --ask-vault-pass -e tool=vpn -e vpn_type=softether
-  ```
+   ```bash
+   ansible-playbook playbooks/liaison_main.yml --ask-vault-pass -e tool=vpn -e vpn_type=softether
+   ```
 
 ## Tool matrix (set `-e tool=...`)
 - `vpn`: role `vpn_manager` (install/remove: WireGuard/OpenVPN/SoftEther)
