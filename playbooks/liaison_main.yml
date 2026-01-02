@@ -5,6 +5,10 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Ensure liaison_log_dir has a default
+      set_fact:
+        liaison_log_dir: "{{ liaison_log_dir | default('/var/log/liaison') }}"
+
     - name: Prompt for tool when not provided
       pause:
         prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/all)"
