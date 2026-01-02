@@ -2,10 +2,16 @@
 
 ## Quick start
 Run commands from the repo root so `ansible.cfg` is picked up (roles_path + inventory). If you must run elsewhere, set `ANSIBLE_CONFIG=/path/to/ansible.cfg`.
-1) Install collections (cache offline if possible):
 
+> 📖 **New to the services?** See [SERVICE_GUIDE.md](SERVICE_GUIDE.md) for post-installation usage instructions for all tools.
+
+1) Run the setup script to install Ansible and collections:
    ```bash
-   ansible-galaxy collection install ansible.posix community.general
+   chmod +x setup.sh && ./setup.sh
+   ```
+   Or manually install collections:
+   ```bash
+   ansible-galaxy collection install ansible.posix community.general community.docker
    ```
 2) Inventory defaults via ansible.cfg to `inventory/inventory.ini` (no `-i` needed unless overriding).
 3) Set vars:
