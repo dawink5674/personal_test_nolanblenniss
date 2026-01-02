@@ -1,8 +1,12 @@
+---
 # From InstallPowerShell.sh: Install/verify/uninstall
 - name: Detect distro
   set_fact:
     powershell_distro: "{{ ansible_distribution | lower }}"
-    powershell_repo_path: "{{ 'ubuntu/' ~ ansible_distribution_version if powershell_distro == 'ubuntu' else 'debian/' ~ ansible_distribution_major_version }}"
+
+- name: Set repo path
+  set_fact:
+    powershell_repo_path: "{{ 'ubuntu/' ~ ansible_distribution_version if powershell_distro in ['ubuntu', 'pop!_os'] else 'debian/' ~ ansible_distribution_major_version }}"
 
 - name: Assert supported distro
   assert:
