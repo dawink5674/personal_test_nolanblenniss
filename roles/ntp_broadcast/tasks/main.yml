@@ -9,18 +9,14 @@
   template:
     src: "{{ playbook_dir }}/templates/chrony_server.conf.j2"
     dest: /etc/chrony/chrony.conf
-  when:
-    - 'ntp_servers' in group_names
-    - ntp_action | default('install') == 'install'
+  when: "'ntp_servers' in group_names and ntp_action | default('install') == 'install'"
   notify: restart chrony
 
 - name: Configure chrony for clients
   template:
     src: "{{ playbook_dir }}/templates/chrony_client.conf.j2"
     dest: /etc/chrony/chrony.conf
-  when:
-    - 'ntp_clients' in group_names
-    - ntp_action | default('install') == 'install'
+  when: "'ntp_clients' in group_names and ntp_action | default('install') == 'install'"
   notify: restart chrony
 
 - name: Ensure chrony running
