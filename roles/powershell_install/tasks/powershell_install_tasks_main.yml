@@ -1,6 +1,4 @@
----
 # From InstallPowerShell.sh: Install/verify/uninstall
----
 - name: Detect distro
   set_fact:
     powershell_distro: "{{ ansible_distribution | lower }}"
