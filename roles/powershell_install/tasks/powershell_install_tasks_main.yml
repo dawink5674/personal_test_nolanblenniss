@@ -14,20 +14,33 @@
       - powershell_distro in ['ubuntu', 'debian']
     fail_msg: "powershell_install supports Ubuntu/Debian only in this role."
 
-- name: Install on Ubuntu/Debian
+- name: Try apt-based install
   block:
     - name: Download Microsoft repo package
       get_url:
         url: "https://packages.microsoft.com/config/{{ powershell_repo_path }}/packages-microsoft-prod.deb"
         dest: /tmp/packages-microsoft-prod.deb
+        timeout: 30
+      retries: 3
+      delay: 5
+      register: repo_download
+      until: repo_download is succeeded
+
     - name: Install repo
       command: dpkg -i /tmp/packages-microsoft-prod.deb
       args:
         creates: /etc/apt/sources.list.d/microsoft-prod.list
-    - name: Update and install
+
+    - name: Update and install via apt
       apt:
         name: powershell
         update_cache: yes
+        state: present
+  rescue:
+    - name: Fallback to snap install
+      community.general.snap:
+        name: powershell
+        classic: yes
         state: present
   when:
     - powershell_distro in ['ubuntu', 'debian']
@@ -37,19 +50,20 @@
   shell: pwsh -c '$PSVersionTable.PSVersion'
   register: ps_version
   changed_when: false
+  failed_when: false
   when: powershell_action | default('install') == 'install'
 
-- name: Start shell (optional)
-  shell: pwsh
-  async: 300
-  poll: 0
-  when:
-    - start_now | default(false) | bool
-    - powershell_action | default('install') == 'install'
-
-- name: Uninstall
+- name: Uninstall apt package
   apt:
     name: powershell
     state: absent
     purge: yes
+  failed_when: false
+  when: powershell_action | default('install') == 'remove' or uninstall | default(false) | bool
+
+- name: Uninstall snap package
+  community.general.snap:
+    name: powershell
+    state: absent
+  failed_when: false
   when: powershell_action | default('install') == 'remove' or uninstall | default(false) | bool

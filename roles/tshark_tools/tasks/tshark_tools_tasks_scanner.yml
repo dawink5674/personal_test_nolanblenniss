@@ -1,5 +1,10 @@
 ---
 # From Network_Scanner_Tshark.sh: Capture/read/filter
+- name: Ensure tshark installed
+  package:
+    name: "{{ tshark_package | default('tshark') }}"
+    state: present
+
 - name: Ensure log dir
   file:
     path: "{{ liaison_log_dir }}"
@@ -8,30 +13,16 @@
 - name: Basic live capture
   shell: tshark -i {{ tshark_interface }} -c 100 -w {{ liaison_log_dir }}/capture.pcap
   async: 30
-  ---
-  - name: Ensure tshark installed
-    package:
-      name: "{{ tshark_package | default('tshark') }}"
-      state: present
+  poll: 5
+  when: tshark_action == 'capture'
 
-  - name: Ensure log dir
-    file:
-      path: "{{ liaison_log_dir }}"
-      state: directory
+- name: Read PCAP
+  shell: tshark -r {{ pcap_file | default(liaison_log_dir ~ '/capture.pcap') }} -V
+  register: pcap_read
+  changed_when: false
+  when: tshark_action == 'read'
 
-  - name: Basic live capture
-    shell: tshark -i {{ tshark_interface }} -c 100 -w {{ liaison_log_dir }}/capture.pcap
-    async: 30
-    poll: 5
-    when: tshark_action == 'capture'
-
-  - name: Read PCAP
-    shell: tshark -r {{ pcap_file | default(liaison_log_dir ~ '/capture.pcap') }} -V
-    register: pcap_read
-    changed_when: false
-    when: tshark_action == 'read'
-
-  - name: Filter (e.g., HTTP)
-    shell: tshark -i {{ tshark_interface }} -f "http" -c 50
-    register: filter_out
-    when: tshark_action == 'filter' and tshark_filter == 'http'
+- name: Filter (e.g., HTTP)
+  shell: tshark -i {{ tshark_interface }} -f "{{ tshark_filter }}" -c 50
+  register: filter_out
+  when: tshark_action == 'filter'

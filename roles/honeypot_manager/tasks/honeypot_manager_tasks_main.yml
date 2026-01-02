@@ -6,9 +6,15 @@
     state: present
   when: honeypot_action | default('install') == 'install'
 
+- name: Ensure endlessh config dir
+  file:
+    path: /etc/endlessh
+    state: directory
+  when: honeypot_action | default('install') == 'install'
+
 - name: Template config
   template:
-    src: endlessh_config.j2
+    src: "{{ playbook_dir }}/templates/endlessh_config.j2"
     dest: /etc/endlessh/config
   notify: restart endlessh
   when: honeypot_action | default('install') == 'install'

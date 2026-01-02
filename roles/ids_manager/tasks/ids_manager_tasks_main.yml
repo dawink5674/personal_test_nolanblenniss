@@ -6,6 +6,12 @@
     state: present
   when: ids_action | default('install') == 'install'
 
+- name: Ensure suricata rules dir
+  file:
+    path: /etc/suricata/rules
+    state: directory
+  when: ids_action | default('install') == 'install'
+
 - name: Template config
   template:
     src: suricata.yaml.j2
@@ -15,7 +21,7 @@
 
 - name: Template custom rules
   template:
-    src: suricata_custom.rules.j2
+    src: "{{ playbook_dir }}/templates/suricata_custom.rules.j2"
     dest: /etc/suricata/rules/custom.rules
   notify: update rules
   when: ids_action | default('install') == 'install'

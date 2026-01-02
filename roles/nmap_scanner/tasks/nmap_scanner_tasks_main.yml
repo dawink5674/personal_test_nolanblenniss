@@ -1,38 +1,31 @@
 ---
 # From Network_Scanner_Nmap.sh: Nmap scans with logging
+- name: Ensure nmap installed
+  package:
+    name: "{{ nmap_package | default('nmap') }}"
+    state: present
+
 - name: Ensure log dir
   file:
     path: "{{ liaison_log_dir }}/nmap_logs"
     state: directory
 
 - name: Run Nmap scan
-  ---
-  - name: Ensure nmap installed
-    package:
-      name: "{{ nmap_package | default('nmap') }}"
-      state: present
+  shell: |
+    nmap {{ nmap_cmd }} -oA {{ liaison_log_dir }}/nmap_logs/scan-{{ ansible_date_time.epoch }}
+  register: nmap_out
+  vars:
+    nmap_cmd: >-
+      {% if nmap_type == 'port' %}-p- -T4 {{ nmap_target }}
+      {% elif nmap_type == 'service' %}-sV {{ nmap_target }}
+      {% elif nmap_type == 'os' %}-O {{ nmap_target }}
+      {% elif nmap_type == 'vuln' %}--script vuln {{ nmap_target }}
+      {% elif nmap_type == 'aggressive' %}-A {{ nmap_target }}
+      {% else %}-sn {{ nmap_target }}{% endif %}
+  async: 300
+  poll: 5
+  changed_when: false
 
-  - name: Ensure log dir
-    file:
-      path: "{{ liaison_log_dir }}/nmap_logs"
-      state: directory
-
-  - name: Run Nmap scan
-    shell: |
-      nmap {{ nmap_cmd | default('-sn ' + nmap_target) }} -oA {{ liaison_log_dir }}/nmap_logs/scan-{{ ansible_date_time.epoch }}.nmap
-    register: nmap_out
-    vars:
-      nmap_cmd: >-
-        {% if nmap_type == 'port' %}-p- -T4
-        {% elif nmap_type == 'service' %}-sV
-        {% elif nmap_type == 'os' %}-O
-        {% elif nmap_type == 'vuln' %}'--script vuln'
-        {% elif nmap_type == 'aggressive' %}-A
-        {% else %}-sn{% endif %} {{ nmap_target }}
-    async: 300  # Spinner-like timeout
-    poll: 5
-    changed_when: false
-
-  - name: Display results
-    debug:
-      msg: "{{ nmap_out.stdout_lines[:10] }}"  # Truncate for output
+- name: Display results
+  debug:
+    msg: "{{ nmap_out.stdout_lines[:10] | default([]) }}"
