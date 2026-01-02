@@ -3,10 +3,10 @@
 ---
 vars:
   address-groups:
-    HOME_NET: "[172.20.242.0/24]"
+    HOME_NET: "[{{ home_net | default('172.20.242.0/24') }}]"
     EXTERNAL_NET: "any"
 default-rule-path: /etc/suricata/rules
 rule-files:
   - custom.rules
 logging:
-  default-log-level: info  # {{ 'debug' if honeypot_adjust == 'verbose' else 'info' }}
+  default-log-level: {{ suricata_log_level | default('info') }}

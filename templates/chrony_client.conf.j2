@@ -1,8 +1,10 @@
 # MWCCDC NTP Client
-{% for pool in ntp_pools %}
-pool {{ pool }}
+{% for pool in ntp_pools | default(['0.pool.ntp.org', '1.pool.ntp.org']) %}
+pool {{ pool }} iburst
 {% endfor %}
+{% if ntp_broadcast_ip is defined %}
 listen {{ ntp_broadcast_ip }}
+{% endif %}
 makestep 1.0 3
 rtcsync
 logdir /var/log/chrony

@@ -6,8 +6,13 @@
           - openvpn
           - easy-rsa
           - iptables-persistent
-          - ufw
         state: present
+
+    - name: Install ufw if enabled
+      package:
+        name: ufw
+        state: present
+      when: ufw_enabled | default(false)
 
     - name: Ensure Easy-RSA dir
       file:
@@ -15,23 +20,75 @@
         state: directory
         mode: '0750'
 
-    - name: Initialize PKI idempotently
-      command: "{{ item.cmd }}"
+    - name: Copy Easy-RSA files
+      shell: cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/ || true
+      args:
+        creates: /etc/openvpn/easy-rsa/easyrsa
+      changed_when: false
+
+    - name: Check if PKI exists
+      stat:
+        path: /etc/openvpn/easy-rsa/pki
+      register: pki_exists
+
+    - name: Initialize PKI
+      shell: ./easyrsa init-pki
       args:
         chdir: /etc/openvpn/easy-rsa
-        creates: "{{ item.creates | default(omit) }}"
-      loop:
-        - { cmd: 'easyrsa init-pki', creates: 'pki' }
-        - { cmd: 'easyrsa build-ca nopass', creates: 'pki/ca.crt' }
-        - { cmd: 'easyrsa build-server-full server nopass', creates: 'pki/issued/server.crt' }
-        - { cmd: 'easyrsa gen-dh', creates: 'pki/dh.pem' }
-        - { cmd: 'openvpn --genkey secret ta.key', creates: 'ta.key' }
+      when: not pki_exists.stat.exists
+
+    - name: Check if CA exists
+      stat:
+        path: /etc/openvpn/easy-rsa/pki/ca.crt
+      register: ca_exists
+
+    - name: Build CA
+      shell: echo "" | ./easyrsa build-ca nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      when: not ca_exists.stat.exists
+
+    - name: Check if server cert exists
+      stat:
+        path: /etc/openvpn/easy-rsa/pki/issued/server.crt
+      register: server_cert_exists
+
+    - name: Build server certificate
+      shell: ./easyrsa build-server-full server nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      when: not server_cert_exists.stat.exists
+
+    - name: Check if DH exists
+      stat:
+        path: /etc/openvpn/easy-rsa/pki/dh.pem
+      register: dh_exists
+
+    - name: Generate DH parameters (this takes a while)
+      shell: ./easyrsa gen-dh
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      when: not dh_exists.stat.exists
+      async: 600
+      poll: 10
+
+    - name: Check if ta.key exists
+      stat:
+        path: /etc/openvpn/easy-rsa/ta.key
+      register: ta_exists
+
+    - name: Generate TLS auth key
+      shell: openvpn --genkey secret ta.key
+      args:
+        chdir: /etc/openvpn/easy-rsa
+      when: not ta_exists.stat.exists
 
     - name: Copy keys and certs
       copy:
         src: "/etc/openvpn/easy-rsa/{{ item }}"
         dest: "/etc/openvpn/{{ item | basename }}"
         remote_src: true
+        mode: '0600'
       loop:
         - pki/ca.crt
         - pki/issued/server.crt
@@ -43,7 +100,7 @@
       template:
         src: "{{ role_path }}/templates/openvpn_server.conf.j2"
         dest: /etc/openvpn/server.conf
-      notify: restart openvpn
+        mode: '0600'
 
     - name: Enable IPv4 forwarding
       ansible.posix.sysctl:
@@ -52,22 +109,21 @@
         state: present
         reload: true
 
-    - name: Masquerade outbound traffic
-      community.general.iptables:
-        table: nat
-        chain: POSTROUTING
-        out_interface: "{{ ansible_default_ipv4.interface }}"
-        jump: MASQUERADE
-        state: present
+    - name: Add NAT masquerade rule
+      shell: |
+        iptables -t nat -C POSTROUTING -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE 2>/dev/null || \
+        iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE
+      changed_when: false
 
     - name: Save iptables rules
-      command: netfilter-persistent save
+      shell: netfilter-persistent save || iptables-save > /etc/iptables/rules.v4
       changed_when: false
 
     - name: Allow OpenVPN port
       ufw:
         rule: allow
-        port: "{{ openvpn_port }}/{{ openvpn_proto }}"
+        port: "{{ openvpn_port }}"
+        proto: "{{ openvpn_proto }}"
       when: ufw_enabled | default(false)
 
     - name: Enable and start OpenVPN
@@ -75,7 +131,23 @@
         name: openvpn@server
         enabled: true
         state: started
+
+    - name: Show OpenVPN status
+      debug:
+        msg: "OpenVPN server started successfully on port {{ openvpn_port }}/{{ openvpn_proto }}"
+
   rescue:
+    - name: Get OpenVPN service status
+      shell: systemctl status openvpn@server 2>&1 || true
+      register: ovpn_status
+      changed_when: false
+
+    - name: Show debug info
+      debug:
+        msg: |
+          OpenVPN service status:
+          {{ ovpn_status.stdout }}
+
     - name: OpenVPN install failed
       fail:
-        msg: "OpenVPN install failed on {{ inventory_hostname }}"
+        msg: "OpenVPN install failed on {{ inventory_hostname }}. Check debug output above."

@@ -1,10 +1,12 @@
 # MWCCDC NTP Server
-server {{ item }} iburst
-{% for pool in ntp_pools %}
+{% for server in ntp_servers | default(['0.pool.ntp.org', '1.pool.ntp.org']) %}
+server {{ server }} iburst
+{% endfor %}
+{% for pool in ntp_pools | default([]) %}
 pool {{ pool }}
 {% endfor %}
-broadcast {{ ntp_broadcast_ip }} 
-allow {{ vpn_internal_net }}
+broadcast {{ ntp_broadcast_ip | default('192.168.1.255') }}
+allow {{ vpn_internal_net | default('192.168.1.0/24') }}
 makestep 1.0 3
 rtcsync
 logdir /var/log/chrony
