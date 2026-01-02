@@ -16,128 +16,99 @@
         state: present
       when: ufw_enabled | default(false)
 
+    - name: Remove old Easy-RSA directory if broken
+      file:
+        path: /etc/openvpn/easy-rsa
+        state: absent
+      when: openvpn_force_reinstall | default(false)
+
     - name: Ensure Easy-RSA dir
       file:
         path: /etc/openvpn/easy-rsa
         state: directory
         mode: '0755'
 
-    - name: Find Easy-RSA source directory
+    - name: Find Easy-RSA source
       shell: |
-        if [ -d /usr/share/easy-rsa ]; then
-          echo "/usr/share/easy-rsa"
-        elif [ -f /usr/share/easy-rsa/easyrsa ]; then
-          echo "/usr/share/easy-rsa"
-        else
-          find /usr -name "easyrsa" -type f 2>/dev/null | head -1 | xargs dirname
-        fi
+        for dir in /usr/share/easy-rsa /usr/share/easy-rsa/3 /usr/share/easy-rsa/3.0; do
+          if [ -f "$dir/easyrsa" ]; then
+            echo "$dir"
+            exit 0
+          fi
+        done
+        dpkg -L easy-rsa 2>/dev/null | grep -m1 "easyrsa$" | xargs dirname
       register: easyrsa_source
       changed_when: false
 
     - name: Copy Easy-RSA files
       shell: |
-        if [ -d "{{ easyrsa_source.stdout }}" ]; then
-          cp -r {{ easyrsa_source.stdout }}/* /etc/openvpn/easy-rsa/
-        fi
+        cp -r {{ easyrsa_source.stdout }}/* /etc/openvpn/easy-rsa/
+        chmod 755 /etc/openvpn/easy-rsa/easyrsa
       args:
         creates: /etc/openvpn/easy-rsa/easyrsa
-
-    - name: Make easyrsa executable
-      file:
-        path: /etc/openvpn/easy-rsa/easyrsa
-        mode: '0755'
-      failed_when: false
 
     - name: Create Easy-RSA vars file
       copy:
         content: |
-          set_var EASYRSA_BATCH "yes"
-          set_var EASYRSA_REQ_CN "OpenVPN-CA"
-          set_var EASYRSA_REQ_COUNTRY "US"
-          set_var EASYRSA_REQ_PROVINCE "State"
-          set_var EASYRSA_REQ_CITY "City"
-          set_var EASYRSA_REQ_ORG "MWCCDC"
-          set_var EASYRSA_REQ_EMAIL "admin@localhost"
-          set_var EASYRSA_REQ_OU "VPN"
-          set_var EASYRSA_KEY_SIZE 2048
-          set_var EASYRSA_ALGO rsa
-          set_var EASYRSA_CA_EXPIRE 3650
+          set_var EASYRSA_BATCH      "yes"
+          set_var EASYRSA_REQ_CN     "OpenVPN-CA"
+          set_var EASYRSA_DN         "cn_only"
+          set_var EASYRSA_KEY_SIZE   2048
+          set_var EASYRSA_ALGO       rsa
+          set_var EASYRSA_CA_EXPIRE  3650
           set_var EASYRSA_CERT_EXPIRE 3650
+          set_var EASYRSA_CRL_DAYS   180
         dest: /etc/openvpn/easy-rsa/vars
         mode: '0644'
 
-    - name: Check if PKI exists
+    - name: Check if valid PKI exists
       stat:
-        path: /etc/openvpn/easy-rsa/pki/ca.crt
-      register: pki_exists
+        path: /etc/openvpn/easy-rsa/pki/issued/server.crt
+      register: server_cert_check
 
-    - name: Initialize PKI (clean start)
-      shell: |
-        cd /etc/openvpn/easy-rsa
-        yes "" | ./easyrsa init-pki 2>/dev/null || ./easyrsa init-pki
-      when: not pki_exists.stat.exists
-      failed_when: false
-
-    - name: Build CA
-      shell: |
-        cd /etc/openvpn/easy-rsa
-        echo -e "\n" | ./easyrsa build-ca nopass 2>&1
-      when: not pki_exists.stat.exists
-      register: ca_result
-      failed_when: false
-
-    - name: Check CA was created
-      stat:
-        path: /etc/openvpn/easy-rsa/pki/ca.crt
-      register: ca_check
-
-    - name: Build CA (alternative method)
+    - name: Initialize PKI and generate all certs
       shell: |
         cd /etc/openvpn/easy-rsa
         export EASYRSA_BATCH=1
-        ./easyrsa --batch build-ca nopass
-      when: not ca_check.stat.exists
-      environment:
-        EASYRSA_BATCH: "1"
-      failed_when: false
-
-    - name: Check if server cert exists
-      stat:
-        path: /etc/openvpn/easy-rsa/pki/issued/server.crt
-      register: server_cert_exists
-
-    - name: Build server certificate
-      shell: |
-        cd /etc/openvpn/easy-rsa
-        ./easyrsa --batch build-server-full server nopass
-      when: not server_cert_exists.stat.exists
-      environment:
-        EASYRSA_BATCH: "1"
-      failed_when: false
-
-    - name: Check if DH exists
-      stat:
-        path: /etc/openvpn/easy-rsa/pki/dh.pem
-      register: dh_exists
-
-    - name: Generate DH parameters (this takes a while)
-      shell: |
-        cd /etc/openvpn/easy-rsa
+        
+        # Clean and init PKI
+        ./easyrsa --batch init-pki
+        
+        # Build CA (non-interactive)
+        ./easyrsa --batch --req-cn="OpenVPN-CA" build-ca nopass
+        
+        # Generate server cert
+        ./easyrsa --batch --req-cn="server" gen-req server nopass
+        ./easyrsa --batch sign-req server server
+        
+        # Generate DH params (can take a while)
         ./easyrsa --batch gen-dh
-      when: not dh_exists.stat.exists
+        
+        # Generate TLS auth key
+        openvpn --genkey secret /etc/openvpn/easy-rsa/pki/ta.key
+        
+        echo "PKI generation complete"
       environment:
         EASYRSA_BATCH: "1"
-      async: 600
-      poll: 10
+      when: not server_cert_check.stat.exists
+      async: 900
+      poll: 15
 
-    - name: Check if ta.key exists
+    - name: Verify PKI files were created
       stat:
-        path: /etc/openvpn/ta.key
-      register: ta_exists
+        path: "{{ item }}"
+      register: pki_files
+      loop:
+        - /etc/openvpn/easy-rsa/pki/ca.crt
+        - /etc/openvpn/easy-rsa/pki/issued/server.crt
+        - /etc/openvpn/easy-rsa/pki/private/server.key
+        - /etc/openvpn/easy-rsa/pki/dh.pem
 
-    - name: Generate TLS auth key
-      shell: openvpn --genkey secret /etc/openvpn/ta.key
-      when: not ta_exists.stat.exists
+    - name: Fail if PKI files missing
+      fail:
+        msg: "PKI file {{ item.item }} not found"
+      when: not item.stat.exists
+      loop: "{{ pki_files.results }}"
 
     - name: Copy CA cert to openvpn dir
       copy:
@@ -167,6 +138,13 @@
         remote_src: true
         mode: '0644'
 
+    - name: Copy TLS auth key
+      copy:
+        src: /etc/openvpn/easy-rsa/pki/ta.key
+        dest: /etc/openvpn/ta.key
+        remote_src: true
+        mode: '0600'
+
     - name: Template server config
       template:
         src: "{{ role_path }}/templates/openvpn_server.conf.j2"
@@ -182,12 +160,15 @@
 
     - name: Add NAT masquerade rule
       shell: |
-        iptables -t nat -C POSTROUTING -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE 2>/dev/null || \
-        iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE
+        iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE 2>/dev/null || \
+        iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o {{ ansible_default_ipv4.interface | default('eth0') }} -j MASQUERADE
       changed_when: false
 
     - name: Save iptables rules
-      shell: netfilter-persistent save || iptables-save > /etc/iptables/rules.v4 || true
+      shell: |
+        mkdir -p /etc/iptables
+        iptables-save > /etc/iptables/rules.v4
+        netfilter-persistent save 2>/dev/null || true
       changed_when: false
       failed_when: false
 
@@ -198,16 +179,36 @@
         proto: "{{ openvpn_proto | default('udp') }}"
       when: ufw_enabled | default(false)
 
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
     - name: Enable and start OpenVPN
       systemd:
         name: openvpn@server
         enabled: true
-        state: started
-        daemon_reload: true
+        state: restarted
+
+    - name: Wait for tun interface
+      shell: |
+        for i in 1 2 3 4 5; do
+          ip link show tun0 2>/dev/null && exit 0
+          sleep 2
+        done
+        exit 1
+      register: tun_check
+      changed_when: false
+      failed_when: false
 
     - name: Show OpenVPN status
       debug:
-        msg: "OpenVPN server started successfully on port {{ openvpn_port | default(1194) }}/{{ openvpn_proto | default('udp') }}"
+        msg: |
+          OpenVPN server started on port {{ openvpn_port | default(1194) }}/{{ openvpn_proto | default('udp') }}
+          TUN interface: {{ 'tun0 UP' if tun_check.rc == 0 else 'tun0 NOT FOUND - check logs' }}
+          
+          View status: systemctl status openvpn@server
+          View logs: journalctl -u openvpn@server -f
+          Check interface: ip addr show tun0
 
   rescue:
     - name: Get OpenVPN service status
@@ -215,35 +216,40 @@
       register: ovpn_status
       changed_when: false
 
-    - name: Check for config issues
-      shell: cat /etc/openvpn/server.conf 2>&1 || echo "No config file"
-      register: ovpn_config
+    - name: Get OpenVPN logs
+      shell: journalctl -u openvpn@server -n 30 --no-pager 2>&1 || true
+      register: ovpn_logs
       changed_when: false
 
     - name: Check PKI files
-      shell: ls -la /etc/openvpn/easy-rsa/pki/ 2>&1 || echo "No PKI directory"
-      register: pki_files
+      shell: ls -la /etc/openvpn/easy-rsa/pki/ /etc/openvpn/easy-rsa/pki/issued/ /etc/openvpn/easy-rsa/pki/private/ 2>&1 || echo "PKI directories missing"
+      register: pki_listing
       changed_when: false
 
-    - name: Check OpenVPN files
-      shell: ls -la /etc/openvpn/*.{crt,key,pem,conf} 2>&1 || echo "Missing files"
+    - name: Check OpenVPN config files
+      shell: ls -la /etc/openvpn/*.{crt,key,pem,conf} 2>&1 || echo "Config files missing"
       register: ovpn_files
       changed_when: false
 
     - name: Show debug info
       debug:
         msg: |
-          OpenVPN service status:
+          === OpenVPN Service Status ===
           {{ ovpn_status.stdout }}
           
-          PKI files:
-          {{ pki_files.stdout }}
+          === Recent Logs ===
+          {{ ovpn_logs.stdout }}
           
-          OpenVPN files:
+          === PKI Files ===
+          {{ pki_listing.stdout }}
+          
+          === OpenVPN Config Files ===
           {{ ovpn_files.stdout }}
           
-          Docs: man:openvpn(8)
-          https://community.openvpn.net/openvpn/wiki/HOWTO
+          === Troubleshooting ===
+          1. Force reinstall: -e openvpn_force_reinstall=true
+          2. Check logs: journalctl -u openvpn@server -f
+          3. Test config: openvpn --config /etc/openvpn/server.conf
 
     - name: OpenVPN install failed
       fail:
