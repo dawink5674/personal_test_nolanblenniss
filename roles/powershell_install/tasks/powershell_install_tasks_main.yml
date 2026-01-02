@@ -4,6 +4,7 @@
 - name: Detect distro
   set_fact:
     powershell_distro: "{{ ansible_distribution | lower }}"
+    powershell_repo_path: "{{ 'ubuntu/' ~ ansible_distribution_version if powershell_distro == 'ubuntu' else 'debian/' ~ ansible_distribution_major_version }}"
 
 - name: Assert supported distro
   assert:
@@ -13,9 +14,9 @@
 
 - name: Install on Ubuntu/Debian
   block:
-    - name: Download DEB
+    - name: Download Microsoft repo package
       get_url:
-        url: https://packages.microsoft.com/config/ubuntu/{{ ansible_distribution_major_version }}/packages-microsoft-prod.deb
+        url: "https://packages.microsoft.com/config/{{ powershell_repo_path }}/packages-microsoft-prod.deb"
         dest: /tmp/packages-microsoft-prod.deb
     - name: Install repo
       command: dpkg -i /tmp/packages-microsoft-prod.deb

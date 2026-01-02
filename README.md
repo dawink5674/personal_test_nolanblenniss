@@ -48,8 +48,8 @@ ansible-playbook playbooks/liaison_main.yml -e tool=fim -e fim_choice=1
 # NTP chrony configure (hosts must be in ntp_servers/ntp_clients groups)
 ansible-playbook playbooks/liaison_main.yml -e tool=ntp
 
-# PowerShell install (Ubuntu/Debian)
-ansible-playbook playbooks/liaison_main.yml -e tool=powershell
+# PowerShell install (Ubuntu/Debian; local host only)
+ansible-playbook playbooks/liaison_main.yml -e tool=powershell -l localhost
 
 # TShark capture/read/filter
 ansible-playbook playbooks/liaison_main.yml -e tool=tshark -e tshark_action=capture
