@@ -4,14 +4,18 @@
   become: true
   gather_facts: true
 
-  vars_prompt:
-    - name: tool
-      prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/all)"
-      private: no
-      default: all
+  pre_tasks:
+    - name: Prompt for tool when not provided
+      pause:
+        prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/all)"
+      register: tool_prompt
       when: tool is not defined
 
-  pre_tasks:
+    - name: Set tool from prompt
+      set_fact:
+        tool: "{{ tool_prompt.user_input | default('all') }}"
+      when: tool is not defined
+
     - name: Ensure liaison log dir
       file:
         path: "{{ liaison_log_dir }}"
