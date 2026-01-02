@@ -1,0 +1,55 @@
+---
+- block:
+    - name: Install SoftEther build dependencies
+      package:
+        name:
+          - build-essential
+          - libreadline-dev
+          - libssl-dev
+          - libncurses5-dev
+          - libncursesw5-dev
+        state: present
+
+    - name: Download SoftEther source
+      get_url:
+        url: "{{ softether_url }}"
+        dest: /tmp/vpnserver.tar.gz
+        mode: '0644'
+
+    - name: Extract source
+      unarchive:
+        src: /tmp/vpnserver.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Compile and install SoftEther
+      shell: |
+        cd /tmp/vpnserver
+        make -j$(nproc)
+        make install
+      args:
+        chdir: /tmp/vpnserver
+        creates: /usr/bin/vpnserver
+
+    - name: Deploy systemd unit
+      template:
+        src: "{{ role_path }}/templates/vpnserver.service.j2"
+        dest: /etc/systemd/system/vpnserver.service
+
+    - name: Reload and start vpnserver
+      systemd:
+        daemon_reload: true
+        name: vpnserver
+        enabled: true
+        state: started
+
+    - name: Allow SoftEther ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop: "{{ softether_ports }}"
+      when: ufw_enabled | default(false)
+  rescue:
+    - name: SoftEther install failed
+      fail:
+        msg: "SoftEther install failed on {{ inventory_hostname }}"

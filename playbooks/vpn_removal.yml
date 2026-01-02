@@ -1,0 +1,107 @@
+---
+- name: Remove VPN Server
+  hosts: vpn_servers
+  become: yes
+  gather_facts: yes
+  vars_prompt:
+    - name: vpn_type
+      prompt: "Enter VPN type to remove (openvpn, wireguard, softether)"
+      private: no
+      default: wireguard
+
+  tasks:
+    - block:  # OpenVPN
+        - name: Stop service
+          systemd:
+            name: openvpn@server
+            state: stopped
+            enabled: no
+
+        - name: Remove files
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/openvpn/easy-rsa
+            - /etc/openvpn/server.conf
+            - /etc/openvpn/ta.key
+            - /etc/openvpn/ca.crt
+            - /etc/openvpn/server.crt
+            - /etc/openvpn/server.key
+            - /etc/openvpn/dh.pem
+
+        - name: Remove firewall rule
+          ufw:
+            rule: deny
+            port: "{{ openvpn_port }}/{{ openvpn_proto }}"
+            delete: yes
+
+      when: vpn_type == "openvpn"
+
+    - block:  # WireGuard
+        - name: Stop service
+          systemd:
+            name: "wg-quick@{{ wg_interface }}"
+            state: stopped
+            enabled: no
+
+        - name: Remove config/keys
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/wireguard/{{ wg_interface }}.conf
+            - /etc/wireguard/private.key
+            - /etc/wireguard/public.key
+
+        - name: Remove firewall rule
+          ufw:
+            rule: deny
+            port: "{{ wg_listen_port }}/udp"
+            delete: yes
+
+      when: vpn_type == "wireguard"
+
+    - block:  # SoftEther
+        - name: Stop service
+          systemd:
+            name: vpnserver
+            state: stopped
+            enabled: no
+
+        - name: Remove files
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /usr/bin/vpnserver
+            - /usr/bin/vpncmd
+            - /etc/systemd/system/vpnserver.service
+
+        - name: Remove artifacts
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/vpnserver.tar.gz
+            - /tmp/vpnserver
+
+        - name: Remove firewall rules
+          ufw:
+            rule: deny
+            port: "{{ item }}"
+            delete: yes
+          loop: "{{ softether_ports }}"
+
+        - name: Purge build deps
+          package:
+            name:
+              - build-essential
+              - libreadline-dev
+              - libssl-dev
+              - libncurses5-dev
+              - libncursesw5-dev
+            state: absent
+            purge: yes
+
+      when: vpn_type == "softether"

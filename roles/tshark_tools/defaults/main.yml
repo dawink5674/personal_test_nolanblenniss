@@ -1,0 +1,5 @@
+---
+tshark_action: capture
+pcap_file: "{{ liaison_log_dir }}/capture.pcap"
+port: 80
+tshark_package: tshark

@@ -1,0 +1,19 @@
+---
+- name: Ensure nmap installed
+  package:
+    name: "{{ nmap_package | default('nmap') }}"
+    state: present
+
+- name: Ensure log dir
+  file:
+    path: "{{ liaison_log_dir }}"
+    state: directory
+
+- name: Sweep subnet with nmap ping scan
+  shell: nmap -sn {{ subnet_cidr }} -oA {{ liaison_log_dir }}/subnet-scan-{{ ansible_date_time.epoch }}
+  register: subnet_scan
+  changed_when: false
+
+- name: Show top of scan output
+  debug:
+    msg: "{{ subnet_scan.stdout_lines[:10] | default([]) }}"

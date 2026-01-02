@@ -1,0 +1,52 @@
+---
+# From InstallPowerShell.sh: Install/verify/uninstall
+---
+- name: Detect distro
+  set_fact:
+    powershell_distro: "{{ ansible_distribution | lower }}"
+
+- name: Assert supported distro
+  assert:
+    that:
+      - powershell_distro in ['ubuntu', 'debian']
+    fail_msg: "powershell_install supports Ubuntu/Debian only in this role."
+
+- name: Install on Ubuntu/Debian
+  block:
+    - name: Download DEB
+      get_url:
+        url: https://packages.microsoft.com/config/ubuntu/{{ ansible_distribution_major_version }}/packages-microsoft-prod.deb
+        dest: /tmp/packages-microsoft-prod.deb
+    - name: Install repo
+      command: dpkg -i /tmp/packages-microsoft-prod.deb
+      args:
+        creates: /etc/apt/sources.list.d/microsoft-prod.list
+    - name: Update and install
+      apt:
+        name: powershell
+        update_cache: yes
+        state: present
+  when:
+    - powershell_distro in ['ubuntu', 'debian']
+    - powershell_action | default('install') == 'install'
+
+- name: Verify
+  shell: pwsh -c '$PSVersionTable.PSVersion'
+  register: ps_version
+  changed_when: false
+  when: powershell_action | default('install') == 'install'
+
+- name: Start shell (optional)
+  shell: pwsh
+  async: 300
+  poll: 0
+  when:
+    - start_now | default(false) | bool
+    - powershell_action | default('install') == 'install'
+
+- name: Uninstall
+  apt:
+    name: powershell
+    state: absent
+    purge: yes
+  when: powershell_action | default('install') == 'remove' or uninstall | default(false) | bool

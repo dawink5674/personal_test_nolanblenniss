@@ -1,0 +1,68 @@
+---
+- name: Install chrony
+  package:
+    name: chrony
+    state: present
+  when: ntp_action | default('install') == 'install'
+
+- name: Configure chrony for servers
+  template:
+    src: "{{ playbook_dir }}/templates/chrony_server.conf.j2"
+    dest: /etc/chrony/chrony.conf
+  when:
+    - 'ntp_servers' in group_names
+    - ntp_action | default('install') == 'install'
+  notify: restart chrony
+
+- name: Configure chrony for clients
+  template:
+    src: "{{ playbook_dir }}/templates/chrony_client.conf.j2"
+    dest: /etc/chrony/chrony.conf
+  when:
+    - 'ntp_clients' in group_names
+    - ntp_action | default('install') == 'install'
+  notify: restart chrony
+
+- name: Ensure chrony running
+  systemd:
+    name: "{{ chrony_service_name }}"
+    enabled: true
+    state: started
+  when: ntp_action | default('install') == 'install'
+
+- name: Verify NTP sync
+  shell: chronyc tracking
+  register: ntp_status
+  changed_when: false
+  when: ntp_action | default('install') == 'install'
+
+- name: Log verification
+  copy:
+    content: "{{ ntp_status.stdout }}"
+    dest: "{{ liaison_log_dir }}/ntp_verify.log"
+  when: ntp_action | default('install') == 'install'
+
+- name: Remove chrony
+  block:
+    - name: Stop chrony service
+      systemd:
+        name: "{{ chrony_service_name }}"
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove chrony package
+      package:
+        name: chrony
+        state: absent
+
+    - name: Remove chrony config
+      file:
+        path: /etc/chrony/chrony.conf
+        state: absent
+
+    - name: Remove NTP verification log
+      file:
+        path: "{{ liaison_log_dir }}/ntp_verify.log"
+        state: absent
+  when: ntp_action | default('install') == 'remove'

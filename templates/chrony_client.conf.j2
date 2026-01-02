@@ -1,0 +1,8 @@
+# MWCCDC NTP Client
+{% for pool in ntp_pools %}
+pool {{ pool }}
+{% endfor %}
+listen {{ ntp_broadcast_ip }}
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony

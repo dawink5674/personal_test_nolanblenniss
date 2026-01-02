@@ -1,0 +1,47 @@
+---
+- name: NTP Broadcast Setup (MWCCDC Segments)
+  hosts: ntp_servers
+  become: yes
+  tasks:
+    - name: Install Chrony
+      package:
+        name: chrony
+        state: present
+
+    - name: Template server config
+      template:
+        src: chrony_server.conf.j2
+        dest: /etc/chrony/chrony.conf
+        backup: yes
+      notify: restart chrony
+
+    - name: Enable UFW for NTP
+      ufw:
+        rule: allow
+        port: 123
+        proto: udp
+      when: ufw_enabled
+
+    - name: Start Chrony
+      systemd:
+        name: chrony
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart chrony
+      systemd:
+        name: chrony
+        state: restarted
+
+- name: NTP Client Setup
+  hosts: ntp_clients
+  become: yes
+  tasks:
+    - name: Template client config
+      template:
+        src: chrony_client.conf.j2
+        dest: /etc/chrony/chrony.conf
+      notify: restart chrony
+
+    # ... (similar to server, plus verification with chronyc sources)

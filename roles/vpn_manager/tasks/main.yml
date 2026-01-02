@@ -1,0 +1,13 @@
+---
+- name: Validate vpn_action
+  assert:
+    that: vpn_action in ['install', 'remove']
+    fail_msg: "vpn_action must be install|remove"
+
+- name: Validate vpn_type
+  assert:
+    that: vpn_type in ['wireguard', 'openvpn', 'softether']
+    fail_msg: "vpn_type must be wireguard|openvpn|softether"
+
+- name: Dispatch VPN tasks
+  include_tasks: "{{ 'install_' ~ vpn_type ~ '.yml' if vpn_action == 'install' else 'remove.yml' }}"

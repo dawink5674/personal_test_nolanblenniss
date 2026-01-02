@@ -1,0 +1,12 @@
+---
+# Integrated into playbooks/ntp_broadcast.yml; this is supplementary for role use
+# (e.g., verify sync)
+- name: Verify NTP sync
+  shell: chronyc sources -v || chronyc tracking
+  register: ntp_status
+  changed_when: false
+
+- name: Log verification
+  copy:
+    content: "{{ ntp_status.stdout }}"
+    dest: "{{ liaison_log_dir }}/ntp_verify.log"

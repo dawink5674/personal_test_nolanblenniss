@@ -1,0 +1,13 @@
+[Unit]
+Description=SoftEther VPN Server
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/vpnserver start
+ExecStop=/usr/bin/vpnserver stop
+PIDFile=/var/run/vpnserver.pid
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

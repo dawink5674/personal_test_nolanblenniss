@@ -1,0 +1,71 @@
+---
+# MWCCDC Common Vars (2025 Team Pack)
+vpn_internal_net: 172.20.242.0/24
+dns_server: 172.20.242.102
+ufw_enabled: true
+liaison_log_dir: /var/log/liaison
+
+# VPN
+openvpn_port: 1194
+openvpn_proto: udp
+openvpn_dev: tun
+openvpn_server_net: 10.8.0.0 255.255.255.0
+openvpn_bind_ip: 172.20.242.104
+
+wg_interface: wg0
+wg_address: 10.0.0.1/24
+wg_listen_port: 51820
+wg_client_ips:
+  - 10.0.0.2/32
+
+# SoftEther defaults now live in role defaults; secrets move to vault/prompt.
+
+# NTP
+ntp_broadcast_ip: 224.0.1.1
+ntp_pools:
+  - pool.ntp.org iburst
+
+# Docker Services
+docker_services:
+  - key: vpn
+    name: OpenVPN
+    image: kylemanna/openvpn
+    ports: 1194:1194/udp
+    host_svc: openvpn@server
+  - key: honeypot
+    name: Cowrie SSH Honeypot
+    image: cowrie/cowrie
+    ports: 2222:2222
+    caps: NET_ADMIN
+  - key: ids
+    name: Suricata
+    image: jasonish/suricata
+    ports: ""
+    caps: NET_ADMIN NET_RAW
+
+# Scanning/Enum
+nmap_target: "{{ vpn_internal_net }}"
+nmap_type: aggressive
+
+# FIM
+fim_path: /etc /var/log /root
+fim_check_interval: "*/5"  # Cron schedule
+
+# TShark
+tshark_interface: any
+tshark_filter: http
+tshark_action: capture
+
+# System Enum
+enum_category: all
+
+# Honeypot
+honeypot_port: 2222
+honeypot_adjust: verbose
+
+# IDS
+ids_type: IDS
+ids_adjust: ssh_rule
+
+# Selection defaults
+service_key: vpn

@@ -1,0 +1,147 @@
+# liaison-ansible-mwccdc
+
+## Quick start
+1) Install collections (cache offline if possible):
+
+   ```bash
+   ansible-galaxy collection install ansible.posix community.general
+   ```
+2) Set inventory (already provided): `inventory/inventory.ini`
+3) Set vars:
+   - Non-secret defaults: `group_vars/all.yml`
+   - Secrets: `group_vars/vault.yml` (plaintext until you `ansible-vault encrypt group_vars/vault.yml`)
+4) Run tools headless via `-e tool=...`; defaults to prompt if omitted.
+
+Examples (VPN + non-VPN):
+```bash
+# WireGuard install
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=wireguard
+
+# OpenVPN install
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=openvpn
+
+# SoftEther install (provide password)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=install -e vpn_type=softether -e softether_server_password=REDACTED
+
+# Remove any VPN stack
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=vpn -e vpn_action=remove
+
+# Run everything
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=all
+
+# Docker engine install
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker
+
+# Dockerize selected service (service_key from group_vars/all.yml)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker -e service_key=vpn
+
+# Subnet sweep (ping scan)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=subnet -e subnet_cidr=192.168.1.0/24
+
+# Nmap scan (mode via nmap_type)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=nmap -e nmap_type=aggressive -e nmap_target=10.0.0.0/24
+
+# FIM monitor (fim_choice: 1 monitor, 2 list, 3 stop, 4 view)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=fim -e fim_choice=1
+
+# NTP chrony configure (hosts must be in ntp_servers/ntp_clients groups)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ntp
+
+# PowerShell install (Ubuntu/Debian)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=powershell
+
+# TShark capture/read/filter
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=tshark -e tshark_action=capture
+
+# System enumeration
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=system
+
+# Honeypot (Endlessh)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=honeypot
+
+# IDS (Suricata)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ids
+
+# Remove Docker engine
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=docker -e docker_action=remove
+
+# Remove Chrony (NTP)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ntp -e ntp_action=remove
+
+# Remove PowerShell
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=powershell -e powershell_action=remove
+
+# Remove Honeypot (Endlessh)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=honeypot -e honeypot_action=remove
+
+# Remove IDS (Suricata)
+ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini -e tool=ids -e ids_action=remove
+```
+
+## Inventory
+`inventory/inventory.ini` ships with:
+- `liaison_local`: localhost (for local tools)
+- `vpn_servers`: 172.20.242.104
+- `ntp_servers`: 172.20.242.104
+- `ntp_clients`: 172.20.242.105
+- `all:vars`: `ansible_user`, SSH key path
+
+Adjust hosts/IPs as needed; keep group names consistent with playbooks.
+
+## Vars and secrets
+- `group_vars/all.yml`: non-sensitive defaults (ports, nets, service vars).
+- `group_vars/vault.yml`: place secrets like `softether_server_password`; encrypt with:
+  ```bash
+  ansible-vault encrypt group_vars/vault.yml
+  ```
+  To run with vault:
+  ```bash
+  ansible-playbook playbooks/liaison_main.yml -i inventory/inventory.ini --ask-vault-pass -e tool=vpn -e vpn_type=softether
+  ```
+
+## Tool matrix (set `-e tool=...`)
+- `vpn`: role `vpn_manager` (install/remove: WireGuard/OpenVPN/SoftEther)
+- `docker`: `docker_install`, `docker_services`
+- `subnet`: `subnet_ping`
+- `nmap`: `nmap_scanner`
+- `fim`: `fim_monitor`
+- `ntp`: `ntp_broadcast`
+- `powershell`: `powershell_install`
+- `tshark`: `tshark_tools`
+- `system`: `system_enum`
+- `honeypot`: `honeypot_manager`
+- `ids`: `ids_manager`
+- `all`: runs everything above
+
+Non-VPN notes:
+- Docker: installs engine then dockerizes selected service from `docker_services` list; set `service_key` (default vpn) and `docker_action=remove` to uninstall engine and prune `/var/lib/docker`.
+- Subnet: `nmap -sn` sweep; requires nmap on target.
+- Nmap: modes via `nmap_type` (port/service/os/vuln/aggressive/sn) and `nmap_target`.
+- FIM: `fim_choice` controls action; baseline/logs stored under `/tmp/fim_sessions`.
+- NTP: chrony templated; uses `ntp_servers`/`ntp_clients` groups and chrony templates in `templates/`; set `ntp_action=remove` to stop and uninstall chrony.
+- PowerShell: Ubuntu/Debian path; set `powershell_action=remove` for uninstall.
+- TShark: capture/read/filter; requires tshark package present.
+- System: writes enum report under `{{ liaison_log_dir }}/enum`.
+- Honeypot: installs Endlessh, templates config/service, logs can be exported; set `honeypot_action=remove` to stop/uninstall.
+- IDS: installs Suricata, templates config/rules; IPS toggle via `ids_type`; set `ids_action=remove` to stop/uninstall.
+
+## VPN knobs (extra-vars)
+- `vpn_action`: `install` | `remove` (default: install)
+- `vpn_type`: `wireguard` | `openvpn` | `softether` (default: wireguard)
+- Common vars in `group_vars/all.yml`: `openvpn_port`, `openvpn_proto`, `wg_listen_port`, `wg_client_ips`, etc.
+
+## Logging
+- Runs append to `{{ liaison_log_dir }}/summary.log` (default `/var/log/liaison`). Ensure writable by Ansible user.
+
+## Offline tips
+- Pre-download Galaxy collections (`ansible-galaxy collection download ...`) and pip wheels if needed.
+- Keep templates local (role copies of OpenVPN/WG configs are bundled under `roles/vpn_manager/templates`).
+- Packages auto-installed by roles: `nmap` (nmap_scanner, subnet_ping), `tshark` (tshark_tools), `chrony` (ntp_broadcast), `docker` (docker_install), `powershell` (Ubuntu/Debian only).
+
+## Troubleshooting
+- Facts: `gather_facts` is on; if slow, set `-e ansible_facts_modules=setup` or use `-t` limits.
+- Firewall: UFW rules gated by `ufw_enabled`. Set false to skip.
+- Privilege: ensure `become` works (sudo/root). For key auth, confirm `ansible_ssh_private_key_file` is valid.
+
+## Legacy note
+`playbooks/vpn_install.yml` and `vpn_removal.yml` are superseded by `roles/vpn_manager`. Use the commands above for VPN work.

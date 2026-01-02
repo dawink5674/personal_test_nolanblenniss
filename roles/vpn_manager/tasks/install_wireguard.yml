@@ -1,0 +1,58 @@
+---
+- block:
+    - name: Install WireGuard packages
+      package:
+        name: wireguard
+        state: present
+
+    - name: Ensure key dir
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: '0700'
+
+    - name: Generate server keys if missing
+      command: wg genkey
+      register: wg_priv
+      args:
+        creates: /etc/wireguard/private.key
+      notify: restart wireguard
+
+    - name: Store private key
+      copy:
+        dest: /etc/wireguard/private.key
+        content: "{{ wg_priv.stdout }}"
+        mode: '0600'
+      when: wg_priv is defined and wg_priv.stdout is defined
+
+    - name: Read private key
+      slurp:
+        path: /etc/wireguard/private.key
+      register: wg_priv_file
+
+    - name: Set server private key fact
+      set_fact:
+        server_private_key_content: "{{ wg_priv_file.content | b64decode | trim }}"
+
+    - name: Render WireGuard config
+      template:
+        src: "{{ role_path }}/templates/wg0.conf.j2"
+        dest: "/etc/wireguard/{{ wg_interface }}.conf"
+        mode: '0600'
+      notify: restart wireguard
+
+    - name: Allow WireGuard port
+      ufw:
+        rule: allow
+        port: "{{ wg_listen_port }}/udp"
+      when: ufw_enabled | default(false)
+
+    - name: Enable and start WireGuard
+      systemd:
+        name: "wg-quick@{{ wg_interface }}"
+        enabled: true
+        state: started
+  rescue:
+    - name: WireGuard install failed
+      fail:
+        msg: "WireGuard install failed on {{ inventory_hostname }}"

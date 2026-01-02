@@ -1,0 +1,10 @@
+# MWCCDC NTP Server
+server {{ item }} iburst
+{% for pool in ntp_pools %}
+pool {{ pool }}
+{% endfor %}
+broadcast {{ ntp_broadcast_ip }} 
+allow {{ vpn_internal_net }}
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony

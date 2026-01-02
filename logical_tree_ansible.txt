@@ -1,0 +1,79 @@
+liaison-ansible-mwccdc/
+├── README.md                          # Setup: ansible-galaxy install collections; ansible-playbook liaison_main.yml -i inventory.ini
+├── inventory/
+│   └── inventory.ini                  # Hosts/groups: localhost (local), linux_servers (172.20.242.*), ntp_servers/clients
+├── group_vars/
+│   └── all.yml                        # MWCCDC vars: nets (172.20.242.0/24), DNS (172.20.242.102), ports, etc.
+├── host_vars/
+│   └── localhost.yml                  # Local overrides (e.g., ansible_python_interpreter=/usr/bin/python3)
+├── templates/                         # Jinja2 configs
+│   ├── openvpn_server.conf.j2         # Existing OpenVPN
+│   ├── wg0.conf.j2                    # Existing WireGuard
+│   ├── chrony_server.conf.j2          # New: NTP server template
+│   ├── chrony_client.conf.j2          # New: NTP client template
+│   ├── suricata_custom.rules.j2       # New: IDS rules
+│   └── endlessh_config.j2             # New: Honeypot config
+├── roles/                             # Converted bash scripts as roles
+│   ├── docker_install/                # From Docker_install.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Install/uninstall tasks
+│   │   └── vars/
+│   │       └── main.yml               # PKG_MANAGER detection
+│   ├── docker_services/               # From docker_service_manager.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Scan/manage (vars for service_key)
+│   │   └── templates/
+│   │       └── docker-compose.yml.j2  # For services (VPN/Honeypot/IDS)
+│   ├── subnet_ping/                   # From SubnetAndPingConfigs.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Calculate/configure/remove/view
+│   │   └── vars/
+│   │       └── main.yml               # Protocol (ipv4/ipv6), mode
+│   ├── nmap_scanner/                  # From Network_Scanner_Nmap.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Scans (host/port/vuln) via vars
+│   │   └── files/
+│   │       └── nmap_logs/             # Log dir creation
+│   ├── fim_monitor/                   # From FIM.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Start/list/stop/view (vars for path/choice)
+│   │   └── templates/
+│   │       └── fim_session.j2         # Session dir template
+│   ├── ntp_broadcast/                 # From ntp_broadcast.sh (integrated into playbook)
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Server/client setup
+│   │   └── files/
+│   │       └── ntp_servers.txt        # Default servers file
+│   ├── powershell_install/            # From InstallPowerShell.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Install/uninstall/verify
+│   │   └── vars/
+│   │       └── main.yml               # DISTRO detection
+│   ├── tshark_tools/                  # From Tshark scripts
+│   │   ├── tasks/
+│   │   │   ├── scanner.yml            # Capture/read/filter
+│   │   │   └── analyzer.yml           # HTTP/DNS/port/IP/TCP/creds
+│   │   └── vars/
+│   │       └── main.yml               # Interface, filter type
+│   ├── system_enum/                   # From system_enumerator.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Overview/users/network/etc. via vars
+│   │   └── templates/
+│   │       └── enum_report.j2         # Report template
+│   ├── honeypot_manager/              # From Honeypot.sh
+│   │   ├── tasks/
+│   │   │   └── main.yml               # Install/uninstall/adjust/export
+│   │   └── templates/
+│   │       └── endlessh.service.j2    # Systemd unit
+│   └── ids_manager/                   # From IDS.sh
+│       ├── tasks/
+│       │   └── main.yml               # Install/uninstall/adjust (IDS/IPS)
+│       └── templates/
+│           └── suricata.yaml.j2       # Config template
+└── playbooks/                         # Main playbooks
+    ├── vpn_install.yml                # Existing (integrated)
+    ├── vpn_removal.yml                # Existing (integrated)
+    ├── ntp_broadcast.yml              # New: From ntp_broadcast.sh
+    ├── subnet_ping.yml                # New: From SubnetAndPingConfigs.sh
+    ├── system_enum.yml                # New: From system_enumerator.sh
+    └── liaison_main.yml               # ULTIMATE: Main orchestrator (prompts for tool)

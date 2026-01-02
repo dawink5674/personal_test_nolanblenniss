@@ -1,0 +1,81 @@
+---
+- block:
+    - name: Install OpenVPN packages
+      package:
+        name:
+          - openvpn
+          - easy-rsa
+          - iptables-persistent
+          - ufw
+        state: present
+
+    - name: Ensure Easy-RSA dir
+      file:
+        path: /etc/openvpn/easy-rsa
+        state: directory
+        mode: '0750'
+
+    - name: Initialize PKI idempotently
+      command: "{{ item.cmd }}"
+      args:
+        chdir: /etc/openvpn/easy-rsa
+        creates: "{{ item.creates | default(omit) }}"
+      loop:
+        - { cmd: 'easyrsa init-pki', creates: 'pki' }
+        - { cmd: 'easyrsa build-ca nopass', creates: 'pki/ca.crt' }
+        - { cmd: 'easyrsa build-server-full server nopass', creates: 'pki/issued/server.crt' }
+        - { cmd: 'easyrsa gen-dh', creates: 'pki/dh.pem' }
+        - { cmd: 'openvpn --genkey secret ta.key', creates: 'ta.key' }
+
+    - name: Copy keys and certs
+      copy:
+        src: "/etc/openvpn/easy-rsa/{{ item }}"
+        dest: "/etc/openvpn/{{ item | basename }}"
+        remote_src: true
+      loop:
+        - pki/ca.crt
+        - pki/issued/server.crt
+        - pki/private/server.key
+        - pki/dh.pem
+        - ta.key
+
+    - name: Template server config
+      template:
+        src: "{{ role_path }}/templates/openvpn_server.conf.j2"
+        dest: /etc/openvpn/server.conf
+      notify: restart openvpn
+
+    - name: Enable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: true
+
+    - name: Masquerade outbound traffic
+      community.general.iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: "{{ ansible_default_ipv4.interface }}"
+        jump: MASQUERADE
+        state: present
+
+    - name: Save iptables rules
+      command: netfilter-persistent save
+      changed_when: false
+
+    - name: Allow OpenVPN port
+      ufw:
+        rule: allow
+        port: "{{ openvpn_port }}/{{ openvpn_proto }}"
+      when: ufw_enabled | default(false)
+
+    - name: Enable and start OpenVPN
+      systemd:
+        name: openvpn@server
+        enabled: true
+        state: started
+  rescue:
+    - name: OpenVPN install failed
+      fail:
+        msg: "OpenVPN install failed on {{ inventory_hostname }}"
