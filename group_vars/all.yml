@@ -40,7 +40,7 @@ docker_services:
   - key: ids
     name: Suricata
     image: jasonish/suricata
-    ports: ""
+    ports: []
     caps: NET_ADMIN NET_RAW
 
 # Scanning/Enum
@@ -48,7 +48,10 @@ nmap_target: "{{ vpn_internal_net }}"
 nmap_type: aggressive
 
 # FIM
-fim_path: /etc /var/log /root
+fim_path:
+  - /etc
+  - /var/log
+  - /root
 fim_check_interval: "*/5"  # Cron schedule
 
 # TShark

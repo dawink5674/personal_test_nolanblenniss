@@ -35,7 +35,7 @@
       community.docker.docker_container:
         name: "{{ selected_service }}-container"
         image: "{{ item.image }}"
-        ports: "{{ [item.ports] if item.ports is string and item.ports != '' else item.ports | default(omit) }}"
+        ports: "{{ omit if (item.ports is not defined or item.ports == '' or item.ports == []) else ([item.ports] if item.ports is string else item.ports) }}"
         capabilities: "{{ item.caps.split() if item.caps is defined and item.caps is string else item.caps | default(omit) }}"
         state: started
         detach: yes
