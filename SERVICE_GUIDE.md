@@ -130,43 +130,43 @@ ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_type=openvpn
 **View PKI Certificates:**
 ```bash
 # Server certificate
-sudo cat /etc/openvpn/server/pki/issued/server.crt
+sudo cat /etc/openvpn/easy-rsa/pki/issued/server.crt
 
 # CA certificate (needed by clients)
-sudo cat /etc/openvpn/server/pki/ca.crt
+sudo cat /etc/openvpn/ca.crt
 
 # List all issued certificates
-ls -la /etc/openvpn/server/pki/issued/
+ls -la /etc/openvpn/easy-rsa/pki/issued/
 ```
 
 **Manage OpenVPN Service:**
 ```bash
 # Start OpenVPN server
-sudo systemctl start openvpn-server@server
+sudo systemctl start openvpn@server
 
 # Stop OpenVPN server
-sudo systemctl stop openvpn-server@server
+sudo systemctl stop openvpn@server
 
 # Restart OpenVPN
-sudo systemctl restart openvpn-server@server
+sudo systemctl restart openvpn@server
 
 # Check status
-sudo systemctl status openvpn-server@server
+sudo systemctl status openvpn@server
 
 # View logs
-sudo journalctl -u openvpn-server@server -f
+sudo journalctl -u openvpn@server -f
 ```
 
 **Generate Client Certificate:**
 ```bash
-cd /etc/openvpn/server
+cd /etc/openvpn/easy-rsa
 sudo ./easyrsa gen-req client1 nopass
 sudo ./easyrsa sign-req client client1
 ```
 
 **View Server Configuration:**
 ```bash
-sudo cat /etc/openvpn/server/server.conf
+sudo cat /etc/openvpn/server.conf
 ```
 
 **Client Configuration Template:**
