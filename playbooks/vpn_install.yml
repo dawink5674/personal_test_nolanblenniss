@@ -3,6 +3,10 @@
   hosts: vpn_servers
   become: yes
   gather_facts: yes
+  vars:
+    softether_download_url: "https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/v4.44-9807-rtm/softether-vpnserver-v4.44-9807-rtm-2025.04.16-linux-x64-64bit.tar.gz"
+    softether_ports: [443, 992, 1194, 5555]
+
   vars_prompt:
     - name: vpn_type
       prompt: "Enter VPN type to install (openvpn, wireguard, softether)"
@@ -22,22 +26,22 @@
             name:
               - ufw
               - iptables-persistent
+              - wget
+              - ca-certificates
             state: present
-          when: ufw_enabled
+          when: ufw_enabled | default(false)
 
     - block:  # OpenVPN
         - name: Install packages
           package:
-            name:
-              - openvpn
-              - easy-rsa
+            name: [openvpn, easy-rsa]
             state: present
 
         - name: Setup Easy-RSA
           shell: |
             make-cadir /etc/openvpn/easy-rsa
             cd /etc/openvpn/easy-rsa
-            ln -s openssl-1.0.0.cnf openssl.cnf
+            ln -s openssl-1.0.0.cnf openssl.cnf || true
           args:
             creates: /etc/openvpn/easy-rsa/easyrsa
 
@@ -87,7 +91,7 @@
         - name: Firewall rule
           ufw:
             rule: allow
-            port: "{{ openvpn_port }}/{{ openvpn_proto }}"
+            port: "{{ openvpn_port | default('1194') }}/{{ openvpn_proto | default('udp') }}"
 
         - name: Start service
           systemd:
@@ -122,17 +126,17 @@
         - name: Template config
           template:
             src: wg0.conf.j2
-            dest: /etc/wireguard/{{ wg_interface }}.conf
+            dest: /etc/wireguard/{{ wg_interface | default('wg0') }}.conf
             mode: '0600'
 
         - name: Firewall rule
           ufw:
             rule: allow
-            port: "{{ wg_listen_port }}/udp"
+            port: "{{ wg_listen_port | default('51820') }}/udp"
 
         - name: Start service
           systemd:
-            name: "wg-quick@{{ wg_interface }}"
+            name: "wg-quick@{{ wg_interface | default('wg0') }}"
             enabled: yes
             state: started
 
@@ -147,31 +151,66 @@
               - libssl-dev
               - libncurses5-dev
               - libncursesw5-dev
+              - zlib1g-dev
+              - wget
+              - tar
+              - make
+              - gcc
+              - ca-certificates
             state: present
 
         - name: Download & extract
           block:
-            - get_url:
-                url: "{{ softether_url }}"
-                dest: /tmp/vpnserver.tar.gz
+            # Use wget with forced IPv4 to fix SSL handshake timeouts
+            - name: Download source (wget)
+              command: >
+                wget -4 --no-check-certificate --no-verbose -O /tmp/vpnserver.tar.gz "{{ softether_download_url }}"
+              args:
+                creates: /tmp/vpnserver.tar.gz
+              register: dl_cmd
+              until: dl_cmd.rc == 0
+              retries: 5
+              delay: 5
+
+            - file:
+                path: /tmp/vpnserver_extract
+                state: directory
             - unarchive:
                 src: /tmp/vpnserver.tar.gz
-                dest: /tmp
+                dest: /tmp/vpnserver_extract
                 remote_src: yes
+            - shell: find /tmp/vpnserver_extract -maxdepth 2 -type d -name "vpnserver" | head -1
+              register: softether_dir
 
         - name: Compile & install
           shell: |
-            cd /tmp/vpnserver
-            make -j$(nproc)
-            make install
+            cd {{ softether_dir.stdout }}
+            echo -e "1\n1\n1" | make
+            mkdir -p /opt/vpnserver
+            cp -r * /opt/vpnserver/
+            chmod 755 /opt/vpnserver/vpnserver /opt/vpnserver/vpncmd
           args:
-            chdir: /tmp/vpnserver
-            creates: /usr/bin/vpnserver
+            creates: /opt/vpnserver/vpnserver
 
-        - name: Systemd unit (assume you have vpnserver.service.j2)
-          template:
-            src: vpnserver.service.j2
+        - name: Create Systemd Service
+          copy:
             dest: /etc/systemd/system/vpnserver.service
+            content: |
+              [Unit]
+              Description=SoftEther VPN Server
+              After=network.target auditd.service
+              ConditionPathExists=!/opt/vpnserver/do_not_run
+
+              [Service]
+              Type=forking
+              ExecStart=/opt/vpnserver/vpnserver start
+              ExecStop=/opt/vpnserver/vpnserver stop
+              KillMode=process
+              Restart=on-failure
+              WorkingDirectory=/opt/vpnserver
+
+              [Install]
+              WantedBy=multi-user.target
 
         - name: Reload & start
           systemd:
@@ -185,11 +224,12 @@
             rule: allow
             port: "{{ item }}"
           loop: "{{ softether_ports }}"
+          when: ufw_enabled | default(false)
 
       when: vpn_type == "softether"
 
   handlers:
     - name: restart wireguard
       systemd:
-        name: "wg-quick@{{ wg_interface }}"
+        name: "wg-quick@{{ wg_interface | default('wg0') }}"
         state: restarted
