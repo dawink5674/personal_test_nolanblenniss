@@ -19,8 +19,8 @@ wg_client_ips:
   - 10.0.0.2/32
 
 # SoftEther defaults
-softether_tag: v4.41-9787-rtm
-softether_version: v4.41-9787-rtm-2023.03.14
+softether_tag: v4.44-9807-rtm
+softether_version: v4.44-9807-rtm-2025.04.16
 softether_url: "https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/{{ softether_tag }}/softether-vpnserver-{{ softether_version }}-linux-x64-64bit.tar.gz"
 softether_ports:
   - 443/tcp
