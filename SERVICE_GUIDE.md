@@ -22,6 +22,9 @@ Post-installation usage guide for all services deployed by the MWCCDC Liaison An
   - [NTP (Chrony)](#ntp-chrony)
   - [PowerShell](#powershell)
   - [System Enumeration](#system-enumeration)
+- [Removal & Uninstall](#removal--uninstall)
+- [Quick Reference](#quick-reference)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -1099,6 +1102,100 @@ find /home -name "authorized_keys" 2>/dev/null
 sudo -l
 cat /etc/sudoers
 ```
+
+---
+
+## Removal & Uninstall
+
+### Remove VPN Services
+
+Use the main playbook with `vpn_action=remove`:
+
+```bash
+# Remove WireGuard
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=wireguard
+
+# Remove OpenVPN  
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=openvpn
+
+# Remove SoftEther
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=softether
+```
+
+Or use the dedicated VPN removal playbook:
+```bash
+ansible-playbook playbooks/vpn_removal.yml -e vpn_type=wireguard
+```
+
+### Remove Non-VPN Tools
+
+Use the `uninstall_tools.yml` playbook:
+
+```bash
+# Remove Docker (containers, images, and engine)
+ansible-playbook playbooks/uninstall_tools.yml -e tool=docker
+
+# Remove IDS (Suricata)
+ansible-playbook playbooks/uninstall_tools.yml -e tool=ids
+
+# Remove Honeypot (Endlessh) - Safely reverts SSH port to 22
+ansible-playbook playbooks/uninstall_tools.yml -e tool=honeypot
+
+# Remove FIM (File Integrity Monitor)
+ansible-playbook playbooks/uninstall_tools.yml -e tool=fim
+
+# Remove Nmap
+ansible-playbook playbooks/uninstall_tools.yml -e tool=nmap
+
+# Remove TShark
+ansible-playbook playbooks/uninstall_tools.yml -e tool=tshark
+
+# Remove NTP (Chrony)
+ansible-playbook playbooks/uninstall_tools.yml -e tool=ntp
+
+# Remove PowerShell
+ansible-playbook playbooks/uninstall_tools.yml -e tool=powershell
+
+# Remove ALL tools at once
+ansible-playbook playbooks/uninstall_tools.yml -e tool=all
+```
+
+### Alternative: Use liaison_main.yml with action=remove
+
+Some tools also support removal via the main playbook:
+
+```bash
+# Docker
+ansible-playbook playbooks/liaison_main.yml -e tool=docker -e docker_action=remove
+
+# NTP (Chrony)
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp -e ntp_action=remove
+
+# PowerShell
+ansible-playbook playbooks/liaison_main.yml -e tool=powershell -e powershell_action=remove
+
+# Honeypot (Endlessh)
+ansible-playbook playbooks/liaison_main.yml -e tool=honeypot -e honeypot_action=remove
+
+# IDS (Suricata)
+ansible-playbook playbooks/liaison_main.yml -e tool=ids -e ids_action=remove
+```
+
+### What Gets Removed
+
+| Tool | Packages | Config Files | Data/Logs |
+|------|----------|--------------|-----------||
+| WireGuard | wireguard, wireguard-tools | /etc/wireguard/ | Keys |
+| OpenVPN | openvpn, easy-rsa | /etc/openvpn/ | /var/log/openvpn/ |
+| SoftEther | (manual install) | /opt/vpnserver/ | Server logs |
+| Docker | docker-ce, containerd | /etc/docker/ | /var/lib/docker/ |
+| Suricata | suricata | /etc/suricata/ | /var/log/suricata/ |
+| Endlessh | endlessh | /etc/endlessh/ | Systemd journal |
+| FIM | (scripts only) | Cron jobs | /var/log/liaison/fim/ |
+| Chrony | chrony | /etc/chrony/ | - |
+| PowerShell | powershell | apt sources | - |
+
+> ⚠️ **WARNING:** Removal is permanent. Back up configurations before uninstalling!
 
 ---
 
