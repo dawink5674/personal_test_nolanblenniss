@@ -161,12 +161,13 @@
 
         - name: Download & extract
           block:
-            # Use wget with forced IPv4 to fix SSL handshake timeouts
+            # Run as regular user to avoid 'sudo password required' error
             - name: Download source (wget)
               command: >
                 wget -4 --no-check-certificate --no-verbose -O /tmp/vpnserver.tar.gz "{{ softether_download_url }}"
               args:
                 creates: /tmp/vpnserver.tar.gz
+              become: no
               register: dl_cmd
               until: dl_cmd.rc == 0
               retries: 5
@@ -175,22 +176,32 @@
             - file:
                 path: /tmp/vpnserver_extract
                 state: directory
+              become: no
+
             - unarchive:
                 src: /tmp/vpnserver.tar.gz
                 dest: /tmp/vpnserver_extract
                 remote_src: yes
+              become: no
+
             - shell: find /tmp/vpnserver_extract -maxdepth 2 -type d -name "vpnserver" | head -1
               register: softether_dir
+              become: no
 
-        - name: Compile & install
+        - name: Compile (User Mode)
           shell: |
             cd {{ softether_dir.stdout }}
             echo -e "1\n1\n1" | make
+          become: no
+
+        - name: Install Binaries (Root Mode)
+          shell: |
             mkdir -p /opt/vpnserver
-            cp -r * /opt/vpnserver/
+            cp -r {{ softether_dir.stdout }}/* /opt/vpnserver/
             chmod 755 /opt/vpnserver/vpnserver /opt/vpnserver/vpncmd
           args:
             creates: /opt/vpnserver/vpnserver
+          become: yes
 
         - name: Create Systemd Service
           copy:
@@ -211,6 +222,7 @@
 
               [Install]
               WantedBy=multi-user.target
+          become: yes
 
         - name: Reload & start
           systemd:
@@ -218,6 +230,7 @@
             name: vpnserver
             enabled: yes
             state: started
+          become: yes
 
         - name: Firewall rules
           ufw:
@@ -225,6 +238,7 @@
             port: "{{ item }}"
           loop: "{{ softether_ports }}"
           when: ufw_enabled | default(false)
+          become: yes
 
       when: vpn_type == "softether"
 
