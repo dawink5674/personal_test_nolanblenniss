@@ -11,7 +11,7 @@
 
     - name: Prompt for tool when not provided
       pause:
-        prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/all)"
+        prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/firewall/xrdp/clamav/backup/audit/all)"
       register: tool_prompt
       when: tool is not defined
 
@@ -51,6 +51,17 @@
       when: tool | default('all') in ['honeypot', 'all']
     - role: ids_manager
       when: tool | default('all') in ['ids', 'all']
+    - role: firewall_hardening
+      when: tool | default('all') in ['firewall', 'all']
+    - role: xrdp_server
+      when: tool | default('all') in ['xrdp', 'all']
+    - role: clamav_antivirus
+      when: tool | default('all') in ['clamav', 'all']
+    - role: backup_restore
+      when: tool | default('all') in ['backup', 'all']
+    - role: user_audit
+      when: tool | default('all') in ['audit', 'all']
+
 
   post_tasks:
     - name: Summary log
