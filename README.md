@@ -118,7 +118,19 @@ Adjust hosts/IPs as needed; keep group names consistent with playbooks.
 - `system`: `system_enum`
 - `honeypot`: `honeypot_manager`
 - `ids`: `ids_manager`
+- `firewall`: `firewall_hardening` (iptables-based)
+- `xrdp`: `xrdp_server` (XFCE4 desktop)
+- `clamav`: `clamav_antivirus`
+- `backup`: `backup_restore`
+- `audit`: `user_audit`
 - `all`: runs everything above
+
+New tool notes:
+- Firewall: iptables with default deny policy; add ports via `allowed_ports` in `group_vars/all.yml`.
+- XRDP: Installs XRDP + XFCE4; connect via Windows RDP to port 3389.
+- ClamAV: Installs daemon, updates definitions, schedules daily scan at 3 AM.
+- Backup: Creates backup script and cron job (2 AM); backs up `/etc`, `/home`, `/var/www`.
+- Audit: Reports UID 0 users and empty passwords in Ansible output.
 
 Non-VPN notes:
 - Docker: installs engine then dockerizes selected service from `docker_services` list; set `service_key` (default vpn) and `docker_action=remove` to uninstall engine and prune `/var/lib/docker`.
