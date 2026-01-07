@@ -105,6 +105,12 @@
             name: vpnserver
             state: stopped
             enabled: no
+          failed_when: false
+          ignore_errors: yes
+
+        - name: Force Kill SoftEther Process (if stuck)
+          shell: pkill -9 -f vpnserver || true
+          failed_when: false
           ignore_errors: yes
 
         - name: Remove files
@@ -126,6 +132,7 @@
             - /tmp/vpnserver.tar.gz
             - /tmp/vpnserver
             - /tmp/softether_extract
+            - /tmp/vpnserver_extract
 
         - name: Remove firewall rules
           ufw:

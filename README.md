@@ -150,5 +150,16 @@ Non-VPN notes:
 - Firewall: UFW rules gated by `ufw_enabled`. Set false to skip.
 - Privilege: ensure `become` works (sudo/root). For key auth, confirm `ansible_ssh_private_key_file` is valid.
 
-## Legacy note
-`playbooks/vpn_install.yml` and `vpn_removal.yml` are superseded by `roles/vpn_manager`. Use the commands above for VPN work.
+## Standalone VPN Playbooks
+
+The standalone `vpn_install.yml` and `vpn_removal.yml` playbooks are available as direct alternatives to the main toolkit:
+
+```bash
+# Install SoftEther directly (use -K if sudo password required)
+ansible-playbook playbooks/vpn_install.yml -e vpn_type=softether -l localhost -K
+
+# Remove SoftEther directly (use -K if sudo password required)
+ansible-playbook playbooks/vpn_removal.yml -e vpn_type=softether -l localhost -K
+```
+
+> **Note:** If your user requires a sudo password, always use the `-K` flag to avoid timeout errors during long-running tasks like SoftEther compilation.
