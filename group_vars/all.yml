@@ -103,3 +103,10 @@ ids_adjust: ssh_rule
 
 # Selection defaults
 service_key: vpn
+
+# Rootkit Scanner
+rootkit_action: scan
+rootkit_scan_dir: /
+rootkit_tools:
+  - rkhunter
+  - chkrootkit

@@ -11,7 +11,7 @@
 
     - name: Prompt for tool when not provided
       pause:
-        prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/firewall/xrdp/clamav/backup/audit/all)"
+        prompt: "Select tool (vpn/docker/subnet/nmap/fim/ntp/powershell/tshark/system/honeypot/ids/firewall/xrdp/clamav/backup/audit/rootkit/all)"
       register: tool_prompt
       when: tool is not defined
 
@@ -61,6 +61,8 @@
       when: tool | default('all') in ['backup', 'all']
     - role: user_audit
       when: tool | default('all') in ['audit', 'all']
+    - role: rootkit_scanner
+      when: tool | default('all') in ['rootkit', 'all']
 
 
   post_tasks:
