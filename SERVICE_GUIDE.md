@@ -18,10 +18,14 @@ Post-installation usage guide for all services deployed by the MWCCDC Liaison An
   - [FIM Monitor](#fim-monitor)
   - [Honeypot (Endlessh)](#honeypot-endlessh)
   - [IDS (Suricata)](#ids-suricata)
+  - [Rootkit Scanner](#rootkit-scanner)
 - [System Tools](#system-tools)
   - [NTP (Chrony)](#ntp-chrony)
   - [PowerShell](#powershell)
   - [System Enumeration](#system-enumeration)
+- [Removal & Uninstall](#removal--uninstall)
+- [Quick Reference](#quick-reference)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -114,8 +118,11 @@ PersistentKeepalive = 25
 # Generate new client keys
 wg genkey | tee client2_private.key | wg pubkey > client2_public.key
 
-# Add peer to server config
+# Add peer to running interface
 sudo wg set wg0 peer $(cat client2_public.key) allowed-ips 10.0.0.3/32
+
+# CRITICAL: Save configuration to disk to persist across reboots
+sudo wg-quick save wg0
 ```
 
 ---
@@ -162,6 +169,13 @@ sudo journalctl -u openvpn@server -f
 cd /etc/openvpn/easy-rsa
 sudo ./easyrsa gen-req client1 nopass
 sudo ./easyrsa sign-req client client1
+
+# ESSENTIAL: Retrieve files needed for client config
+# Private Key (keep secret)
+sudo cat /etc/openvpn/easy-rsa/pki/private/client1.key
+
+# Certificate
+sudo cat /etc/openvpn/easy-rsa/pki/issued/client1.crt
 ```
 
 **View Server Configuration:**
@@ -201,8 +215,16 @@ echo "status" | nc localhost 7505
 ### SoftEther
 
 **Installation:**
+
+> [!TIP]
+> If your user requires a sudo password, add `-K` to prompt for it upfront.
+
 ```bash
+# Standard installation
 ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_type=softether -e softether_server_password=YourPassword
+
+# With sudo password prompt (recommended)
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_type=softether -e softether_server_password=YourPassword -K
 ```
 
 **Manage SoftEther Service:**
@@ -254,10 +276,10 @@ exit
 **Quick Setup Commands:**
 ```bash
 # One-liner to check server status
-echo "ServerStatusGet" | sudo /opt/vpnserver/vpncmd localhost /SERVER /PASSWORD:YourPassword /CMD
+sudo /opt/vpnserver/vpncmd localhost /SERVER /PASSWORD:YourPassword /CMD ServerStatusGet
 
 # List all hubs
-echo "HubList" | sudo /opt/vpnserver/vpncmd localhost /SERVER /PASSWORD:YourPassword /CMD
+sudo /opt/vpnserver/vpncmd localhost /SERVER /PASSWORD:YourPassword /CMD HubList
 ```
 
 **View Logs:**
@@ -289,32 +311,32 @@ ansible-playbook playbooks/liaison_main.yml -e tool=docker
 # Check Docker is running
 sudo systemctl status docker
 
-# View running containers
-docker ps
+# View running containers (use sudo unless user is in docker group)
+sudo docker ps
 
 # View all containers (including stopped)
-docker ps -a
+sudo docker ps -a
 
 # View images
-docker images
+sudo docker images
 
 # Pull an image
-docker pull nginx:latest
+sudo docker pull nginx:latest
 
 # Run a container
-docker run -d --name mycontainer -p 8080:80 nginx
+sudo docker run -d --name mycontainer -p 8080:80 nginx
 
 # Stop a container
-docker stop mycontainer
+sudo docker stop mycontainer
 
 # Start a container
-docker start mycontainer
+sudo docker start mycontainer
 
 # Remove a container
-docker rm mycontainer
+sudo docker rm mycontainer
 
 # Remove an image
-docker rmi nginx:latest
+sudo docker rmi nginx:latest
 ```
 
 **Docker Compose:**
@@ -418,14 +440,14 @@ nmap -p- -T4 10.0.0.1
 # Service version detection
 nmap -sV 10.0.0.1
 
-# OS detection
-nmap -O 10.0.0.1
+# OS detection (Requires Root)
+sudo nmap -O 10.0.0.1
 
 # Vulnerability scan
 nmap --script vuln 10.0.0.1
 
 # Aggressive scan (OS, version, scripts, traceroute)
-nmap -A 10.0.0.1
+sudo nmap -A 10.0.0.1
 ```
 
 **Common Nmap Commands:**
@@ -439,10 +461,10 @@ nmap -p 22,80,443 10.0.0.1
 # Scan port range
 nmap -p 1-1000 10.0.0.1
 
-# UDP scan
-sudo nmap -sU 10.0.0.1
+# UDP scan (Top 20 ports - full UDP is very slow)
+sudo nmap -sU --top-ports 20 10.0.0.1
 
-# Stealth SYN scan
+# Stealth SYN scan (Requires Root)
 sudo nmap -sS 10.0.0.1
 
 # Script scan (default scripts)
@@ -475,17 +497,21 @@ ansible-playbook playbooks/liaison_main.yml -e tool=tshark -e tshark_action=capt
 # List available interfaces
 tshark -D
 
-# Capture on specific interface
-sudo tshark -i eth0
+# NOTE: Interface names vary (eth0, ens18, enp3s0, etc.)
+# Find your interface first:
+ip a
+
+# Capture on specific interface (replace <interface> with yours)
+sudo tshark -i <interface>
 
 # Capture with packet count limit
-sudo tshark -i eth0 -c 100
+sudo tshark -i <interface> -c 100
 
 # Capture and save to file
-sudo tshark -i eth0 -w capture.pcap
+sudo tshark -i <interface> -w capture.pcap
 
 # Capture with time limit (seconds)
-sudo tshark -i eth0 -a duration:60 -w capture.pcap
+sudo tshark -i <interface> -a duration:60 -w capture.pcap
 ```
 
 **Capture Filters (BPF syntax):**
@@ -589,30 +615,33 @@ ansible-playbook playbooks/liaison_main.yml -e tool=fim -e fim_choice=4
 **Manual FIM Commands:**
 ```bash
 # View active FIM sessions
-ls -la /tmp/fim_sessions/
+ls -la /var/log/liaison/fim/
 
 # View baseline for a session
-cat /tmp/fim_sessions/<session_id>/baseline.txt
+cat /var/log/liaison/fim/<session_id>/baseline.txt
 
 # View detected changes
-cat /tmp/fim_sessions/<session_id>/changes.log
+cat /var/log/liaison/fim/<session_id>/changes.log
 
 # View FIM cron jobs
 crontab -l | grep FIM
 
 # Manually check for changes
 find /etc -type f -exec md5sum {} + > /tmp/current.txt
-diff /tmp/fim_sessions/<session_id>/baseline.txt /tmp/current.txt
+diff /var/log/liaison/fim/<session_id>/baseline.txt /tmp/current.txt
 ```
 
 **Create Manual Baseline:**
 ```bash
+# IMPORTANT: Use /var/log/liaison/fim/ for persistence (NOT /tmp - cleared on reboot!)
+sudo mkdir -p /var/log/liaison/fim
+
 # Create baseline of /etc directory
-find /etc -type f -exec md5sum {} + 2>/dev/null > /tmp/etc_baseline.txt
+sudo find /etc -type f -exec md5sum {} + 2>/dev/null > /var/log/liaison/fim/etc_baseline.txt
 
 # Compare later
 find /etc -type f -exec md5sum {} + 2>/dev/null > /tmp/etc_current.txt
-diff /tmp/etc_baseline.txt /tmp/etc_current.txt
+diff /var/log/liaison/fim/etc_baseline.txt /tmp/etc_current.txt
 ```
 
 ---
@@ -665,22 +694,36 @@ sudo journalctl -u endlessh | grep "CLOSE"
 ```
 
 **Redirect Real SSH (Optional):**
+
+> ⚠️ **WARNING: Perform these steps in EXACT order to avoid lockout!**
+
 ```bash
-# Move real SSH to different port first
+# 1. FIRST: Open new SSH port in firewall
+sudo ufw allow 2222/tcp comment "Real SSH"
+
+# 2. Update SSH config to use new port
 sudo sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config
+# If line was already uncommented:
+sudo sed -i 's/^Port 22/Port 2222/' /etc/ssh/sshd_config
+
+# 3. Restart SSH
 sudo systemctl restart sshd
 
-# Then set Endlessh to port 22
+# 4. TEST: In a NEW terminal, verify you can connect on port 2222
+#    ssh -p 2222 user@server
+#    DO NOT close your current session until verified!
+
+# 5. Set Endlessh to take over port 22
 sudo sed -i 's/Port 2222/Port 22/' /etc/endlessh/config
 sudo systemctl restart endlessh
 ```
 
 **Firewall Configuration:**
 ```bash
-# Allow honeypot port
-sudo ufw allow 2222/tcp comment "Endlessh honeypot"
+# Allow real SSH port
+sudo ufw allow 2222/tcp comment "Real SSH"
 
-# If using port 22 for honeypot
+# Allow honeypot on port 22
 sudo ufw allow 22/tcp comment "Endlessh honeypot"
 ```
 
@@ -786,6 +829,102 @@ sudo suricatasc
 
 # Shutdown
 >>> shutdown
+```
+
+---
+
+### Rootkit Scanner
+
+**Installation:**
+```bash
+# Install rkhunter and chkrootkit
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=install
+```
+
+**Run Scan (Full System):**
+```bash
+# Scan entire filesystem (default)
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan
+```
+
+**Run Scan (Custom Directory):**
+```bash
+# Scan specific directory
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/home
+
+# Scan /etc only
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/etc
+```
+
+**Update Databases:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=update
+```
+
+**Manual rkhunter Commands:**
+```bash
+# Run full scan
+sudo rkhunter --check
+
+# Run scan with no prompts
+sudo rkhunter --check --skip-keypress
+
+# Show warnings only
+sudo rkhunter --check --report-warnings-only
+
+# Update database
+sudo rkhunter --update
+
+# Update file properties database
+sudo rkhunter --propupd
+
+# View log
+cat /var/log/liaison/rootkit/rkhunter-*.log
+```
+
+**Manual chkrootkit Commands:**
+```bash
+# Run full scan
+sudo chkrootkit
+
+# Scan specific directory
+sudo chkrootkit -r /home
+
+# Quiet mode (infected only)
+sudo chkrootkit -q
+
+# Expert mode (more details)
+sudo chkrootkit -x
+
+# View log
+cat /var/log/liaison/rootkit/chkrootkit-*.log
+```
+
+**View Scan Results:**
+```bash
+# List all rootkit scan logs
+ls -la /var/log/liaison/rootkit/
+
+# View latest rkhunter log
+cat /var/log/liaison/rootkit/rkhunter-$(date +%Y-%m-%d).log
+
+# View latest chkrootkit log
+cat /var/log/liaison/rootkit/chkrootkit-$(date +%Y-%m-%d).log
+
+# Search for warnings in rkhunter logs
+grep -i "warning" /var/log/liaison/rootkit/rkhunter-*.log
+
+# Search for infections in chkrootkit logs
+grep -i "infected" /var/log/liaison/rootkit/chkrootkit-*.log
+```
+
+**Manage Scheduled Scans:**
+```bash
+# View cron jobs
+crontab -l | grep -E "rkhunter|chkrootkit"
+
+# Remove scheduled scans
+crontab -l | grep -v "rkhunter\|chkrootkit" | crontab -
 ```
 
 ---
@@ -898,11 +1037,11 @@ Get-Help Get-Process
 # List processes
 Get-Process
 
-# List services
+# List services (wraps systemctl on Linux)
 Get-Service
 
-# Get system info
-Get-ComputerInfo
+# Get PowerShell version info
+$PSVersionTable
 
 # List files
 Get-ChildItem /home
@@ -916,17 +1055,19 @@ Get-ChildItem -Recurse -Filter "*.log"
 
 **PowerShell for Linux Administration:**
 ```powershell
-# Get network info
-Get-NetIPAddress
+# NOTE: Windows cmdlets like Get-NetIPAddress do NOT work on Linux!
+# Use native Linux commands instead:
+
+# Get network info (native Linux)
+ip addr
 
 # Get disk usage
 Get-PSDrive
 
-# Check service status
-Get-Service ssh
-
-# Run bash commands
-bash -c "df -h"
+# Run bash commands from PowerShell
+bash -c "ss -tulnp"   # List listening ports
+bash -c "df -h"       # Disk usage
+bash -c "ip addr"     # Network info
 
 # Get environment variables
 Get-ChildItem Env:
@@ -946,14 +1087,14 @@ Invoke-Command -HostName 192.168.1.100 -UserName admin -ScriptBlock { Get-Proces
 
 **Useful Scripts:**
 ```powershell
-# List listening ports
-Get-NetTCPConnection -State Listen | Select-Object LocalAddress, LocalPort, OwningProcess
-
 # Find large files
-Get-ChildItem -Recurse | Where-Object {$_.Length -gt 100MB}
+Get-ChildItem -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.Length -gt 100MB}
 
 # Monitor log file
 Get-Content /var/log/syslog -Tail 10 -Wait
+
+# List listening ports (use native Linux - more reliable)
+bash -c "ss -tulnp"
 ```
 
 **Check PowerShell Version:**
@@ -1065,6 +1206,276 @@ find /home -name "authorized_keys" 2>/dev/null
 # Sudo permissions
 sudo -l
 cat /etc/sudoers
+```
+
+---
+
+
+
+## System Hardening
+
+### Firewall (iptables)
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=firewall
+```
+
+**Features:**
+- Default policy: DROP incoming, ACCEPT outgoing
+- Allows established/related connections
+- Explicitly allows SSH (port 22)
+- Allows ports defined in `allowed_ports` variable
+
+**View Rules:**
+```bash
+# List all rules
+sudo iptables -L -n -v
+
+# List rules with line numbers
+sudo iptables -L --line-numbers
+```
+
+**Add/Remove Rules Manually:**
+```bash
+# Allow a new port
+sudo iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+
+# Remove a rule by line number
+sudo iptables -D INPUT <line_number>
+
+# Save rules (Debian/Ubuntu)
+sudo iptables-save > /etc/iptables/rules.v4
+
+# Save rules (RedHat/Fedora)
+sudo iptables-save > /etc/sysconfig/iptables
+```
+
+**Configuration:**
+- Modify `allowed_ports` in `group_vars/all.yml` to add more ports.
+- Set `firewall_flush_existing: true` to clear existing rules before applying.
+
+---
+
+### XRDP Server (Remote Desktop)
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=xrdp
+```
+
+**Manage XRDP Service:**
+```bash
+# Start XRDP
+sudo systemctl start xrdp
+
+# Stop XRDP
+sudo systemctl stop xrdp
+
+# Check status
+sudo systemctl status xrdp
+
+# View logs
+sudo journalctl -u xrdp -f
+```
+
+**Connect from Windows:**
+1. Open Remote Desktop Connection (`mstsc.exe`)
+2. Enter server IP address (e.g., `172.20.242.104`)
+3. Connect and login with Linux credentials
+
+**Troubleshooting:**
+```bash
+# Check if port 3389 is listening
+sudo ss -tlnp | grep 3389
+
+# Verify .xsession exists
+cat ~/.xsession
+```
+
+---
+
+### ClamAV Antivirus
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=clamav
+```
+
+**Manage ClamAV Service:**
+```bash
+# Check daemon status (Debian/Ubuntu)
+sudo systemctl status clamav-daemon
+
+# Check daemon status (RedHat/Fedora)
+sudo systemctl status clamd@scan
+
+# Update definitions manually
+sudo freshclam
+```
+
+**Manual Scanning:**
+```bash
+# Scan a directory
+clamscan -r /home
+
+# Scan with infected file removal (DANGER!)
+clamscan -r --remove /path/to/scan
+
+# Scan and move infected to quarantine
+clamscan -r --move=/var/quarantine /path/to/scan
+```
+
+**View Scan Logs:**
+```bash
+cat /var/log/clamav/manual_scan.log
+```
+
+**Cron Job:**
+- Runs daily at 3:00 AM
+- Scans directory defined in `clamav_scan_dir` (default: `/home`)
+- Logs to `clamav_log_file` (default: `/var/log/clamav/manual_scan.log`)
+
+---
+
+### Backup & Restore
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=backup
+```
+
+**Run Backup Manually:**
+```bash
+sudo /usr/local/bin/mwccdc_backup.sh
+```
+
+**View Backups:**
+```bash
+ls -la /var/backups/mwccdc/
+```
+
+**Restore from Backup:**
+```bash
+# Extract backup
+cd /
+sudo tar -xzf /var/backups/mwccdc/backup_YYYYMMDD_HHMMSS.tar.gz
+```
+
+**What Gets Backed Up:**
+- `/etc` - System configuration
+- `/var/www` - Web files (if exists)
+- `/home` - User home directories
+- `/var/lib/mysql` - MySQL data (if exists)
+
+**Cron Job:**
+- Runs daily at 2:00 AM
+- Logs to `/var/log/mwccdc_backup.log`
+
+---
+
+### User Audit
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=audit
+```
+
+**What It Checks:**
+- Users with UID 0 (root-level privileges)
+- Users with empty passwords in `/etc/shadow`
+
+**Manual Audit Commands:**
+```bash
+# Find UID 0 users
+awk -F: '($3 == 0) {print $1}' /etc/passwd
+
+# Find users with empty passwords
+sudo awk -F: '($2 == "" ) {print $1}' /etc/shadow
+
+# Find users with no password required
+sudo awk -F: '($2 == "!" || $2 == "*") {print $1}' /etc/shadow
+
+# List sudoers
+sudo cat /etc/sudoers
+sudo ls -la /etc/sudoers.d/
+```
+
+---
+
+### Extended Docker Services
+
+**Installation:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=docker
+```
+
+**Available Services:**
+| Service | Image | Port | Description |
+|---------|-------|------|-------------|
+| Filebrowser | filebrowser/filebrowser | 8080 | Web-based file manager |
+| ownCloud | owncloud/server | 8081 | Private cloud storage |
+| TFTP | pghalliday/tftp | 69/udp | Simple file transfer |
+
+**Start Specific Service:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=docker -e service_key=filebrowser
+```
+
+**Access Services:**
+- Filebrowser: `http://<server_ip>:8080`
+- ownCloud: `http://<server_ip>:8081`
+
+---
+
+
+## Removal & Uninstall
+
+All removal commands use the same `liaison_main.yml` playbook with `_action=remove` flags.
+
+> [!IMPORTANT]
+> If your user requires a sudo password, add the `-K` flag to any command below.
+
+### VPN Removal
+```bash
+# Remove WireGuard
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=wireguard
+
+# Remove OpenVPN
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=openvpn
+
+# Remove SoftEther (use -K if password required)
+ansible-playbook playbooks/liaison_main.yml -e tool=vpn -e vpn_action=remove -e vpn_type=softether -K
+```
+
+### Tool Removal
+```bash
+# Remove Docker engine
+ansible-playbook playbooks/liaison_main.yml -e tool=docker -e docker_action=remove
+
+# Remove Chrony (NTP)
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp -e ntp_action=remove
+
+# Remove PowerShell
+ansible-playbook playbooks/liaison_main.yml -e tool=powershell -e powershell_action=remove
+
+# Remove Honeypot (Endlessh)
+ansible-playbook playbooks/liaison_main.yml -e tool=honeypot -e honeypot_action=remove
+
+# Remove IDS (Suricata)
+ansible-playbook playbooks/liaison_main.yml -e tool=ids -e ids_action=remove
+```
+
+### Standalone VPN Playbooks (Alternative)
+
+For direct VPN operations without the main toolkit wrapper:
+
+```bash
+# Install any VPN (use -K if password required)
+ansible-playbook playbooks/vpn_install.yml -e vpn_type=softether -l localhost -K
+
+# Remove any VPN (use -K if password required)
+ansible-playbook playbooks/vpn_removal.yml -e vpn_type=softether -l localhost -K
 ```
 
 ---
