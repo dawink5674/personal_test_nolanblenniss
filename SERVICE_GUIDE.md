@@ -763,6 +763,102 @@ sudo cat /var/log/suricata/stats.log
 
 ---
 
+### Rootkit Scanner
+
+**Installation:**
+```bash
+# Install rkhunter and chkrootkit
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=install
+```
+
+**Run Scan (Full System):**
+```bash
+# Scan entire filesystem (default)
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan
+```
+
+**Run Scan (Custom Directory):**
+```bash
+# Scan specific directory
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/home
+
+# Scan /etc only
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/etc
+```
+
+**Update Databases:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=update
+```
+
+**Manual rkhunter Commands:**
+```bash
+# Run full scan
+sudo rkhunter --check
+
+# Run scan with no prompts
+sudo rkhunter --check --skip-keypress
+
+# Show warnings only
+sudo rkhunter --check --report-warnings-only
+
+# Update database
+sudo rkhunter --update
+
+# Update file properties database
+sudo rkhunter --propupd
+
+# View log
+cat /var/log/liaison/rootkit/rkhunter-*.log
+```
+
+**Manual chkrootkit Commands:**
+```bash
+# Run full scan
+sudo chkrootkit
+
+# Scan specific directory
+sudo chkrootkit -r /home
+
+# Quiet mode (infected only)
+sudo chkrootkit -q
+
+# Expert mode (more details)
+sudo chkrootkit -x
+
+# View log
+cat /var/log/liaison/rootkit/chkrootkit-*.log
+```
+
+**View Scan Results:**
+```bash
+# List all rootkit scan logs
+ls -la /var/log/liaison/rootkit/
+
+# View latest rkhunter log
+cat /var/log/liaison/rootkit/rkhunter-$(date +%Y-%m-%d).log
+
+# View latest chkrootkit log
+cat /var/log/liaison/rootkit/chkrootkit-$(date +%Y-%m-%d).log
+
+# Search for warnings in rkhunter logs
+grep -i "warning" /var/log/liaison/rootkit/rkhunter-*.log
+
+# Search for infections in chkrootkit logs
+grep -i "infected" /var/log/liaison/rootkit/chkrootkit-*.log
+```
+
+**Manage Scheduled Scans:**
+```bash
+# View cron jobs
+crontab -l | grep -E "rkhunter|chkrootkit"
+
+# Remove scheduled scans
+crontab -l | grep -v "rkhunter\|chkrootkit" | crontab -
+```
+
+---
+
 ## System Tools
 
 ### NTP (Chrony)
