@@ -13,9 +13,9 @@
           - tar
           - make
           - gcc
+          - ca-certificates
         state: present
-      environment:
-        DEBIAN_FRONTEND: noninteractive
+      become: yes
 
     - name: Check if SoftEther is already installed
       stat:
@@ -27,34 +27,40 @@
         path: /opt/vpnserver
         state: directory
         mode: '0755'
+      become: yes
       when: not softether_installed.stat.exists
 
     - name: Clean up old downloads
       file:
         path: "{{ item }}"
         state: absent
+      become: yes
       loop:
         - /tmp/vpnserver.tar.gz
-        - /tmp/vpnserver
+        - /tmp/softether_extract
       when: not softether_installed.stat.exists
 
-    - name: Download SoftEther source
-      get_url:
-        url: "{{ softether_url | default('https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/v4.41-9787-rtm-2023.03.14/softether-vpnserver-v4.41-9787-rtm-2023.03.14-linux-x64-64bit.tar.gz') }}"
-        dest: /tmp/vpnserver.tar.gz
-        mode: '0644'
-        timeout: 300
-      when: not softether_installed.stat.exists
-      retries: 3
-      delay: 10
+    # Run as regular user (become: no) to avoid 'sudo password required' error
+    # /tmp is world-writable, so root is not needed for download/extract/compile
+    - name: Download SoftEther source (wget)
+      command: >
+        wget -4 --no-check-certificate --no-verbose -O /tmp/vpnserver.tar.gz
+        "{{ softether_url | default('https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/v4.44-9807-rtm/softether-vpnserver-v4.44-9807-rtm-2025.04.16-linux-x64-64bit.tar.gz') }}"
+      args:
+        creates: /tmp/vpnserver.tar.gz
+      become: no
       register: download_result
-      until: download_result is succeeded
+      until: download_result.rc == 0
+      retries: 5
+      delay: 5
+      when: not softether_installed.stat.exists
 
     - name: Create extraction directory
       file:
         path: /tmp/softether_extract
         state: directory
         mode: '0755'
+      become: no
       when: not softether_installed.stat.exists
 
     - name: Extract source
@@ -62,12 +68,14 @@
         src: /tmp/vpnserver.tar.gz
         dest: /tmp/softether_extract
         remote_src: true
+      become: no
       when: not softether_installed.stat.exists
 
     - name: Find extracted vpnserver directory
       shell: find /tmp/softether_extract -maxdepth 2 -type d -name "vpnserver" | head -1
       register: softether_dir
       changed_when: false
+      become: no
       when: not softether_installed.stat.exists
 
     - name: Set SoftEther source path
@@ -81,10 +89,12 @@
       register: makefile_check
       when: not softether_installed.stat.exists
 
+    # Compile as regular user - doesn't need root for /tmp
     - name: Compile SoftEther (accept license)
       shell: |
         cd {{ softether_source }}
         echo -e "1\n1\n1" | make
+      become: no
       when:
         - not softether_installed.stat.exists
         - makefile_check.stat.exists | default(false)
@@ -92,10 +102,12 @@
       poll: 15
       register: compile_result
 
+    # Switch back to root for installation to /opt
     - name: Copy compiled SoftEther to /opt
       shell: |
         cp -r {{ softether_source }}/* /opt/vpnserver/
         chmod 755 /opt/vpnserver/vpnserver /opt/vpnserver/vpncmd 2>/dev/null || true
+      become: yes
       when: not softether_installed.stat.exists
 
     - name: Verify SoftEther binaries
@@ -114,6 +126,7 @@
         mode: '0755'
         owner: root
         group: root
+      become: yes
       loop:
         - /opt/vpnserver/vpnserver
         - /opt/vpnserver/vpncmd
@@ -126,22 +139,26 @@
         owner: root
         group: root
         recurse: yes
+      become: yes
 
     - name: Deploy systemd unit
       template:
         src: "{{ role_path }}/templates/vpnserver.service.j2"
         dest: /etc/systemd/system/vpnserver.service
         mode: '0644'
+      become: yes
 
     - name: Reload systemd
       systemd:
         daemon_reload: true
+      become: yes
 
     - name: Start vpnserver
       systemd:
         name: vpnserver
         enabled: true
         state: started
+      become: yes
 
     - name: Wait for SoftEther to start
       wait_for:
@@ -152,6 +169,7 @@
     - name: Set initial server password
       shell: |
         /opt/vpnserver/vpncmd localhost /SERVER /CMD ServerPasswordSet {{ softether_server_password | default('admin') }}
+      become: yes
       when: softether_server_password is defined
       failed_when: false
       no_log: true
@@ -161,6 +179,7 @@
         rule: allow
         port: "{{ item.split('/')[0] }}"
         proto: "{{ item.split('/')[1] | default('tcp') }}"
+      become: yes
       loop: "{{ softether_ports | default(['443/tcp', '992/tcp', '1194/tcp', '5555/tcp']) }}"
       when: ufw_enabled | default(false)
 
@@ -169,6 +188,7 @@
       register: se_version
       changed_when: false
       failed_when: false
+      become: yes
 
     - name: Show SoftEther status
       debug:
@@ -191,16 +211,19 @@
       shell: systemctl status vpnserver 2>&1 || true
       register: se_status
       changed_when: false
+      become: no
 
     - name: Check for vpnserver binary
       shell: ls -la /opt/vpnserver/ 2>&1 || echo "Directory not found"
       register: vpnserver_files
       changed_when: false
+      become: yes
 
     - name: Check compilation logs
       shell: cat /tmp/softether_extract/vpnserver/*.log 2>/dev/null || echo "No logs found"
       register: compile_logs
       changed_when: false
+      become: no
 
     - name: Show debug info
       debug:

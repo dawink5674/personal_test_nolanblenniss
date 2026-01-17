@@ -23,6 +23,13 @@ Post-installation usage guide for all services deployed by the MWCCDC Liaison An
   - [NTP (Chrony)](#ntp-chrony)
   - [PowerShell](#powershell)
   - [System Enumeration](#system-enumeration)
+- [System Hardening](#system-hardening)
+  - [Firewall (iptables)](#firewall-iptables)
+  - [XRDP Server](#xrdp-server-remote-desktop)
+  - [ClamAV Antivirus](#clamav-antivirus)
+  - [Backup & Restore](#backup--restore)
+  - [User Audit](#user-audit)
+  - [Extended Docker Services](#extended-docker-services)
 - [Removal & Uninstall](#removal--uninstall)
 - [Quick Reference](#quick-reference)
 - [Troubleshooting](#troubleshooting)
@@ -693,40 +700,6 @@ sudo journalctl -u endlessh | grep "ACCEPT" | awk '{print $NF}' | sort | uniq -c
 sudo journalctl -u endlessh | grep "CLOSE"
 ```
 
-**Redirect Real SSH (Optional):**
-
-> ⚠️ **WARNING: Perform these steps in EXACT order to avoid lockout!**
-
-```bash
-# 1. FIRST: Open new SSH port in firewall
-sudo ufw allow 2222/tcp comment "Real SSH"
-
-# 2. Update SSH config to use new port
-sudo sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config
-# If line was already uncommented:
-sudo sed -i 's/^Port 22/Port 2222/' /etc/ssh/sshd_config
-
-# 3. Restart SSH
-sudo systemctl restart sshd
-
-# 4. TEST: In a NEW terminal, verify you can connect on port 2222
-#    ssh -p 2222 user@server
-#    DO NOT close your current session until verified!
-
-# 5. Set Endlessh to take over port 22
-sudo sed -i 's/Port 2222/Port 22/' /etc/endlessh/config
-sudo systemctl restart endlessh
-```
-
-**Firewall Configuration:**
-```bash
-# Allow real SSH port
-sudo ufw allow 2222/tcp comment "Real SSH"
-
-# Allow honeypot on port 22
-sudo ufw allow 22/tcp comment "Endlessh honeypot"
-```
-
 ---
 
 ### IDS (Suricata)
@@ -788,145 +761,6 @@ sudo cat /var/log/suricata/eve.json | jq 'select(.event_type=="alert")'
 sudo cat /var/log/suricata/stats.log
 ```
 
-**Common Alert Analysis:**
-```bash
-# Count alerts by signature
-sudo cat /var/log/suricata/eve.json | jq -r 'select(.event_type=="alert") | .alert.signature' | sort | uniq -c | sort -rn
-
-# View alerts from specific IP
-sudo cat /var/log/suricata/eve.json | jq 'select(.event_type=="alert" and .src_ip=="192.168.1.100")'
-
-# Get top source IPs
-sudo cat /var/log/suricata/eve.json | jq -r 'select(.event_type=="alert") | .src_ip' | sort | uniq -c | sort -rn | head -20
-```
-
-**Custom Rules:**
-```bash
-# View custom rules
-cat /etc/suricata/rules/custom.rules
-
-# Add a custom rule
-echo 'alert tcp any any -> any 4444 (msg:"Possible Meterpreter"; sid:1000003; rev:1;)' | sudo tee -a /etc/suricata/rules/custom.rules
-
-# Reload rules
-sudo suricatasc -c reload-rules
-```
-
-**Suricata Socket Commands:**
-```bash
-# Connect to Suricata socket
-sudo suricatasc
-
-# Inside suricatasc:
-# Get running mode
->>> running-mode
-
-# Get stats
->>> dump-counters
-
-# Reload rules
->>> reload-rules
-
-# Shutdown
->>> shutdown
-```
-
----
-
-### Rootkit Scanner
-
-**Installation:**
-```bash
-# Install rkhunter and chkrootkit
-ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=install
-```
-
-**Run Scan (Full System):**
-```bash
-# Scan entire filesystem (default)
-ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan
-```
-
-**Run Scan (Custom Directory):**
-```bash
-# Scan specific directory
-ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/home
-
-# Scan /etc only
-ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=scan -e rootkit_scan_dir=/etc
-```
-
-**Update Databases:**
-```bash
-ansible-playbook playbooks/liaison_main.yml -e tool=rootkit -e rootkit_action=update
-```
-
-**Manual rkhunter Commands:**
-```bash
-# Run full scan
-sudo rkhunter --check
-
-# Run scan with no prompts
-sudo rkhunter --check --skip-keypress
-
-# Show warnings only
-sudo rkhunter --check --report-warnings-only
-
-# Update database
-sudo rkhunter --update
-
-# Update file properties database
-sudo rkhunter --propupd
-
-# View log
-cat /var/log/liaison/rootkit/rkhunter-*.log
-```
-
-**Manual chkrootkit Commands:**
-```bash
-# Run full scan
-sudo chkrootkit
-
-# Scan specific directory
-sudo chkrootkit -r /home
-
-# Quiet mode (infected only)
-sudo chkrootkit -q
-
-# Expert mode (more details)
-sudo chkrootkit -x
-
-# View log
-cat /var/log/liaison/rootkit/chkrootkit-*.log
-```
-
-**View Scan Results:**
-```bash
-# List all rootkit scan logs
-ls -la /var/log/liaison/rootkit/
-
-# View latest rkhunter log
-cat /var/log/liaison/rootkit/rkhunter-$(date +%Y-%m-%d).log
-
-# View latest chkrootkit log
-cat /var/log/liaison/rootkit/chkrootkit-$(date +%Y-%m-%d).log
-
-# Search for warnings in rkhunter logs
-grep -i "warning" /var/log/liaison/rootkit/rkhunter-*.log
-
-# Search for infections in chkrootkit logs
-grep -i "infected" /var/log/liaison/rootkit/chkrootkit-*.log
-```
-
-**Manage Scheduled Scans:**
-```bash
-# View cron jobs
-crontab -l | grep -E "rkhunter|chkrootkit"
-
-# Remove scheduled scans
-crontab -l | grep -v "rkhunter\|chkrootkit" | crontab -
-```
-
 ---
 
 ## System Tools
@@ -974,40 +808,6 @@ sudo chronyc makestep
 chronyc clients
 ```
 
-**Check Time Synchronization:**
-```bash
-# Quick sync status
-chronyc tracking | grep "Leap status"
-
-# Check if synchronized
-timedatectl status
-
-# View system time vs NTP
-chronyc tracking | grep -E "Reference|System|Last"
-```
-
-**Configuration:**
-```bash
-# View config
-cat /etc/chrony/chrony.conf
-
-# Add NTP server manually
-echo "server time.google.com iburst" | sudo tee -a /etc/chrony/chrony.conf
-sudo systemctl restart chrony
-```
-
-**Troubleshooting:**
-```bash
-# Check if chrony can reach servers
-chronyc sourcestats
-
-# Check NTP port
-sudo ss -ulnp | grep 123
-
-# Test specific server
-chronyd -Q "server pool.ntp.org iburst"
-```
-
 ---
 
 ### PowerShell
@@ -1029,79 +829,6 @@ pwsh -Command "Get-Process"
 pwsh -File script.ps1
 ```
 
-**Basic PowerShell Commands:**
-```powershell
-# Get help
-Get-Help Get-Process
-
-# List processes
-Get-Process
-
-# List services (wraps systemctl on Linux)
-Get-Service
-
-# Get PowerShell version info
-$PSVersionTable
-
-# List files
-Get-ChildItem /home
-
-# Read file content
-Get-Content /etc/passwd
-
-# Find files
-Get-ChildItem -Recurse -Filter "*.log"
-```
-
-**PowerShell for Linux Administration:**
-```powershell
-# NOTE: Windows cmdlets like Get-NetIPAddress do NOT work on Linux!
-# Use native Linux commands instead:
-
-# Get network info (native Linux)
-ip addr
-
-# Get disk usage
-Get-PSDrive
-
-# Run bash commands from PowerShell
-bash -c "ss -tulnp"   # List listening ports
-bash -c "df -h"       # Disk usage
-bash -c "ip addr"     # Network info
-
-# Get environment variables
-Get-ChildItem Env:
-```
-
-**PowerShell Remoting (PSRemoting):**
-```powershell
-# Enable remoting (requires setup)
-Enable-PSRemoting -Force
-
-# Connect to remote Linux
-Enter-PSSession -HostName 192.168.1.100 -UserName admin
-
-# Run remote command
-Invoke-Command -HostName 192.168.1.100 -UserName admin -ScriptBlock { Get-Process }
-```
-
-**Useful Scripts:**
-```powershell
-# Find large files
-Get-ChildItem -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.Length -gt 100MB}
-
-# Monitor log file
-Get-Content /var/log/syslog -Tail 10 -Wait
-
-# List listening ports (use native Linux - more reliable)
-bash -c "ss -tulnp"
-```
-
-**Check PowerShell Version:**
-```powershell
-$PSVersionTable
-```
-
 ---
 
 ### System Enumeration
@@ -1120,97 +847,7 @@ ls -la /var/log/liaison/enum/
 cat /var/log/liaison/enum/report-*.txt
 ```
 
-**Manual Enumeration Commands:**
-```bash
-# Listening ports
-ss -tulnp
-
-# All connections
-ss -anp
-
-# Running processes (sorted by memory)
-ps aux --sort=-%mem
-
-# Running processes (sorted by CPU)
-ps aux --sort=-%cpu
-
-# Last logins
-last -n 20
-
-# Failed login attempts
-lastb -n 20
-
-# Current logged in users
-who
-w
-
-# User accounts
-cat /etc/passwd
-
-# Scheduled tasks (cron)
-crontab -l
-sudo ls -la /etc/cron.d/
-sudo cat /etc/crontab
-
-# Systemd timers
-systemctl list-timers
-
-# Installed packages (Debian/Ubuntu)
-dpkg -l
-
-# Installed packages (RHEL/CentOS)
-rpm -qa
-
-# Open files
-lsof -i
-
-# Network interfaces
-ip addr
-ip route
-
-# Firewall rules
-sudo iptables -L -n -v
-sudo ufw status verbose
-
-# System info
-uname -a
-hostnamectl
-cat /etc/os-release
-
-# Disk usage
-df -h
-du -sh /*
-
-# Memory usage
-free -h
-
-# Uptime and load
-uptime
-```
-
-**Security Enumeration:**
-```bash
-# SUID binaries
-find / -perm -4000 -type f 2>/dev/null
-
-# World-writable files
-find / -perm -002 -type f 2>/dev/null
-
-# Files modified in last 24h
-find / -mtime -1 -type f 2>/dev/null
-
-# SSH authorized keys
-cat ~/.ssh/authorized_keys
-find /home -name "authorized_keys" 2>/dev/null
-
-# Sudo permissions
-sudo -l
-cat /etc/sudoers
-```
-
 ---
-
-
 
 ## System Hardening
 
@@ -1428,7 +1065,6 @@ ansible-playbook playbooks/liaison_main.yml -e tool=docker -e service_key=filebr
 
 ---
 
-
 ## Removal & Uninstall
 
 All removal commands use the same `liaison_main.yml` playbook with `_action=remove` flags.
@@ -1466,18 +1102,6 @@ ansible-playbook playbooks/liaison_main.yml -e tool=honeypot -e honeypot_action=
 ansible-playbook playbooks/liaison_main.yml -e tool=ids -e ids_action=remove
 ```
 
-### Standalone VPN Playbooks (Alternative)
-
-For direct VPN operations without the main toolkit wrapper:
-
-```bash
-# Install any VPN (use -K if password required)
-ansible-playbook playbooks/vpn_install.yml -e vpn_type=softether -l localhost -K
-
-# Remove any VPN (use -K if password required)
-ansible-playbook playbooks/vpn_removal.yml -e vpn_type=softether -l localhost -K
-```
-
 ---
 
 ## Quick Reference
@@ -1507,12 +1131,6 @@ sudo journalctl -u <service> -f   # View logs
 
 ### Firewall Quick Commands
 ```bash
-# UFW (Ubuntu)
-sudo ufw status
-sudo ufw allow 22/tcp
-sudo ufw deny 23/tcp
-sudo ufw enable
-
 # iptables
 sudo iptables -L -n -v
 sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
@@ -1571,5 +1189,4 @@ ip route
 
 # Check firewall
 sudo iptables -L -n
-sudo ufw status
 ```

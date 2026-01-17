@@ -1,6 +1,7 @@
 ---
-fim_choice: 1  # 1 monitor, 2 list, 3 stop/remove, 4 view
 fim_path:
   - /etc
   - /var/log
-fim_check_interval: "*/5"
+  - /root
+fim_choice: 1
+fim_check_interval: 5

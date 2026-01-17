@@ -66,6 +66,6 @@
       copy:
         content: |
           Mode: {{ subnet_mode }}, Proto: {{ subnet_proto }}
-          {{ (ipv4_calc.stdout if subnet_proto == 'ipv4' else ipv6_calc.stdout) if subnet_mode == 'calculate' else ping_test.stdout if subnet_mode == 'configure' else current_ip.stdout }}
+          {{ (ipv4_calc.stdout | default('N/A') if subnet_proto == 'ipv4' else ipv6_calc.stdout | default('N/A')) if subnet_mode == 'calculate' else (ping_test.stdout | default('N/A') if subnet_mode == 'configure' else current_ip.stdout | default('N/A')) }}
         dest: "{{ liaison_log_dir }}/subnet_ping.log"
         backup: yes

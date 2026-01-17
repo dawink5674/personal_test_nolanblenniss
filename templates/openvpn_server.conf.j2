@@ -2,7 +2,7 @@
 port {{ openvpn_port }}
 proto {{ openvpn_proto }}
 dev {{ openvpn_dev }}
-bind 172.20.242.104  {# Bind to Linux server IP for security #}
+local {{ openvpn_bind_ip | default('0.0.0.0') }}
 ca /etc/openvpn/ca.crt
 cert /etc/openvpn/server.crt
 key /etc/openvpn/server.key

@@ -2,7 +2,17 @@
 # MWCCDC Liaison Ansible Setup Script
 # Installs Ansible and required collections
 
-set -e
+set -euo pipefail
+
+# Helper function to run with sudo only if not root
+run_sudo() {
+    if [ "$EUID" -eq 0 ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 
 echo "=== Liaison Ansible Setup ==="
 
@@ -12,12 +22,13 @@ if command -v python3 &>/dev/null; then
     echo "[OK] $PYTHON_VERSION found"
 else
     echo "[ERROR] Python3 not found. Installing..."
+
     if command -v apt &>/dev/null; then
-        sudo apt update && sudo apt install -y python3 python3-pip
+        run_sudo apt update && run_sudo apt install -y python3 python3-pip
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y python3 python3-pip
+        run_sudo dnf install -y python3 python3-pip
     elif command -v yum &>/dev/null; then
-        sudo yum install -y python3 python3-pip
+        run_sudo yum install -y python3 python3-pip
     else
         echo "[ERROR] Cannot detect package manager. Please install Python3 manually."
         exit 1
@@ -27,10 +38,11 @@ fi
 # Check for pip3
 if ! command -v pip3 &>/dev/null; then
     echo "[WARN] pip3 not found. Installing..."
+
     if command -v apt &>/dev/null; then
-        sudo apt install -y python3-pip
+        run_sudo apt install -y python3-pip
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y python3-pip
+        run_sudo dnf install -y python3-pip
     fi
 fi
 
@@ -43,10 +55,16 @@ else
     pip3 install --user ansible
     
     # Add local bin to PATH if not present
+
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
         export PATH="$HOME/.local/bin:$PATH"
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        echo "[INFO] Added ~/.local/bin to PATH"
+        if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+            echo "[INFO] Added ~/.local/bin to ~/.bashrc"
+        else
+            echo "[INFO] ~/.local/bin already in ~/.bashrc"
+        fi
+        echo "[INFO] Added ~/.local/bin to current PATH"
     fi
 fi
 

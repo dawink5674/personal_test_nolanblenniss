@@ -118,7 +118,19 @@ Adjust hosts/IPs as needed; keep group names consistent with playbooks.
 - `system`: `system_enum`
 - `honeypot`: `honeypot_manager`
 - `ids`: `ids_manager`
+- `firewall`: `firewall_hardening` (iptables-based)
+- `xrdp`: `xrdp_server` (XFCE4 desktop)
+- `clamav`: `clamav_antivirus`
+- `backup`: `backup_restore`
+- `audit`: `user_audit`
 - `all`: runs everything above
+
+New tool notes:
+- Firewall: iptables with default deny policy; add ports via `allowed_ports` in `group_vars/all.yml`.
+- XRDP: Installs XRDP + XFCE4; connect via Windows RDP to port 3389.
+- ClamAV: Installs daemon, updates definitions, schedules daily scan at 3 AM.
+- Backup: Creates backup script and cron job (2 AM); backs up `/etc`, `/home`, `/var/www`.
+- Audit: Reports UID 0 users and empty passwords in Ansible output.
 
 Non-VPN notes:
 - Docker: installs engine then dockerizes selected service from `docker_services` list; set `service_key` (default vpn) and `docker_action=remove` to uninstall engine and prune `/var/lib/docker`.
@@ -150,5 +162,16 @@ Non-VPN notes:
 - Firewall: UFW rules gated by `ufw_enabled`. Set false to skip.
 - Privilege: ensure `become` works (sudo/root). For key auth, confirm `ansible_ssh_private_key_file` is valid.
 
-## Legacy note
-`playbooks/vpn_install.yml` and `vpn_removal.yml` are superseded by `roles/vpn_manager`. Use the commands above for VPN work.
+## Standalone VPN Playbooks
+
+The standalone `vpn_install.yml` and `vpn_removal.yml` playbooks are available as direct alternatives to the main toolkit:
+
+```bash
+# Install SoftEther directly (use -K if sudo password required)
+ansible-playbook playbooks/vpn_install.yml -e vpn_type=softether -l localhost -K
+
+# Remove SoftEther directly (use -K if sudo password required)
+ansible-playbook playbooks/vpn_removal.yml -e vpn_type=softether -l localhost -K
+```
+
+> **Note:** If your user requires a sudo password, always use the `-K` flag to avoid timeout errors during long-running tasks like SoftEther compilation.

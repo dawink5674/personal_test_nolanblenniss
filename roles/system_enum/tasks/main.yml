@@ -8,16 +8,19 @@
   command: ss -tulnp
   register: enum_ports
   changed_when: false
+  failed_when: false
 
 - name: Capture running processes
   command: ps aux --sort=-%mem
   register: enum_procs
   changed_when: false
+  failed_when: false
 
 - name: Capture last logins
   command: last -n 10
   register: enum_last
   changed_when: false
+  failed_when: false
 
 - name: Capture cron
   command: crontab -l

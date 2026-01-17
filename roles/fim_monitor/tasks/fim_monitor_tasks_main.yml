@@ -14,9 +14,11 @@
   file:
     path: "/tmp/fim_sessions/{{ session_id.stdout }}"
     state: directory
+    mode: '0700'
 
 - name: Create baseline
-  shell: find {{ fim_path | join(' ') }} -type f -exec md5sum {} + 2>/dev/null > "/tmp/fim_sessions/{{ session_id.stdout }}/baseline.txt" || true
+  shell: |
+    find {{ fim_path | join(' ') }} -type f -exec md5sum {} + 2>/dev/null > "/tmp/fim_sessions/{{ session_id.stdout }}/baseline.txt" || true
   args:
     creates: "/tmp/fim_sessions/{{ session_id.stdout }}/baseline.txt"
   when: fim_choice | default(1) | int == 1
@@ -24,10 +26,10 @@
 - name: Install FIM cron job (persistent monitoring)
   cron:
     name: "FIM monitor {{ session_id.stdout }}"
-    minute: "{{ fim_check_interval | default('*/5') }}"
-    job: >
-      find {{ fim_path | join(' ') }} -type f -exec md5sum {} + 2>/dev/null >
-      /tmp/current_hash.txt;
+    minute: "*/5"
+    hour: "*"
+    job: >-
+      find {{ fim_path | join(' ') }} -type f -exec md5sum {} + 2>/dev/null > /tmp/current_hash.txt;
       diff /tmp/fim_sessions/{{ session_id.stdout }}/baseline.txt /tmp/current_hash.txt >>
       /tmp/fim_sessions/{{ session_id.stdout }}/changes.log 2>&1 || true;
       cp /tmp/current_hash.txt /tmp/fim_sessions/{{ session_id.stdout }}/baseline.txt

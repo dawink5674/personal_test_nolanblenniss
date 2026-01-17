@@ -42,16 +42,50 @@ docker_services:
     image: jasonish/suricata
     ports: ""
     caps: NET_ADMIN NET_RAW
+  - key: filebrowser
+    name: Filebrowser
+    image: filebrowser/filebrowser
+    ports: "8080:80"
+  - key: owncloud
+    name: ownCloud
+    image: owncloud/server
+    ports: "8081:8080"
+  - key: tftp
+    name: TFTP Server
+    image: pghalliday/tftp
+    ports: "69:69/udp"
+    caps: NET_ADMIN
+
 
 # Scanning/Enum
 nmap_target: "{{ vpn_internal_net }}"
 nmap_type: aggressive
 
+# Firewall
+allowed_ports:
+  - 22
+  - 80
+  - 443
+  - 3389  # XRDP
+  - 1194  # OpenVPN
+  - 51820 # WireGuard
+
+# Backup
+backup_dir: /var/backups/mwccdc
+
 # FIM
 fim_path: /etc /var/log /root
 fim_check_interval: "*/5"  # Cron schedule
 
+# ClamAV
+clamav_scan_dir: /home
+clamav_log_file: /var/log/clamav/manual_scan.log
+
+# XRDP
+xrdp_port: 3389
+
 # TShark
+
 tshark_interface: any
 tshark_filter: http
 tshark_action: capture
@@ -69,3 +103,10 @@ ids_adjust: ssh_rule
 
 # Selection defaults
 service_key: vpn
+
+# Rootkit Scanner
+rootkit_action: scan
+rootkit_scan_dir: /
+rootkit_tools:
+  - rkhunter
+  - chkrootkit

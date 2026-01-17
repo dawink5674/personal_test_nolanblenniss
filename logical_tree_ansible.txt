@@ -1,79 +1,163 @@
 liaison-ansible-mwccdc/
 ├── README.md                          # Setup: ansible-galaxy install collections; ansible-playbook liaison_main.yml -i inventory.ini
+├── SERVICE_GUIDE.md
+├── ansible.cfg
+├── main.yml
+├── setup.sh
 ├── inventory/
 │   └── inventory.ini                  # Hosts/groups: localhost (local), linux_servers (172.20.242.*), ntp_servers/clients
 ├── group_vars/
-│   └── all.yml                        # MWCCDC vars: nets (172.20.242.0/24), DNS (172.20.242.102), ports, etc.
+│   ├── all.yml                        # MWCCDC vars: nets (172.20.242.0/24), DNS (172.20.242.102), ports, etc.
+│   └── vault.yml
 ├── host_vars/
 │   └── localhost.yml                  # Local overrides (e.g., ansible_python_interpreter=/usr/bin/python3)
 ├── templates/                         # Jinja2 configs
-│   ├── openvpn_server.conf.j2         # Existing OpenVPN
-│   ├── wg0.conf.j2                    # Existing WireGuard
-│   ├── chrony_server.conf.j2          # New: NTP server template
-│   ├── chrony_client.conf.j2          # New: NTP client template
-│   ├── suricata_custom.rules.j2       # New: IDS rules
-│   └── endlessh_config.j2             # New: Honeypot config
-├── roles/                             # Converted bash scripts as roles
-│   ├── docker_install/                # From Docker_install.sh
+│   ├── chrony_client.conf.j2          # NTP client template
+│   ├── chrony_server.conf.j2          # NTP server template
+│   ├── endlessh_config.j2             # Honeypot config
+│   ├── openvpn_server.conf.j2         # OpenVPN server
+│   ├── suricata_custom.rules.j2       # IDS rules
+│   └── wg0.conf.j2                    # WireGuard config
+├── roles/                             # Converted bash scripts as roles (18 total)
+│   ├── backup_restore/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       └── main.yml               # Backup/restore system configs
+│   ├── clamav_antivirus/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       └── main.yml               # ClamAV install/scan/update
+│   ├── docker_install/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       └── main.yml               # Install/uninstall Docker engine
+│   ├── docker_services/
+│   │   ├── defaults/
+│   │   │   └── main.yml
 │   │   ├── tasks/
-│   │   │   └── main.yml               # Install/uninstall tasks
-│   │   └── vars/
-│   │       └── main.yml               # PKG_MANAGER detection
-│   ├── docker_services/               # From docker_service_manager.sh
-│   │   ├── tasks/
-│   │   │   └── main.yml               # Scan/manage (vars for service_key)
+│   │   │   ├── docker_services_tasks_main.yml
+│   │   │   └── main.yml               # Deploy containers (VPN/Honeypot/IDS/Filebrowser/ownCloud/TFTP)
 │   │   └── templates/
-│   │       └── docker-compose.yml.j2  # For services (VPN/Honeypot/IDS)
-│   ├── subnet_ping/                   # From SubnetAndPingConfigs.sh
+│   │       └── docker-compose.yml.j2
+│   ├── fim_monitor/
+│   │   ├── defaults/
+│   │   │   └── main.yml
 │   │   ├── tasks/
-│   │   │   └── main.yml               # Calculate/configure/remove/view
-│   │   └── vars/
-│   │       └── main.yml               # Protocol (ipv4/ipv6), mode
-│   ├── nmap_scanner/                  # From Network_Scanner_Nmap.sh
-│   │   ├── tasks/
-│   │   │   └── main.yml               # Scans (host/port/vuln) via vars
-│   │   └── files/
-│   │       └── nmap_logs/             # Log dir creation
-│   ├── fim_monitor/                   # From FIM.sh
-│   │   ├── tasks/
+│   │   │   ├── fim_monitor_tasks_main.yml
 │   │   │   └── main.yml               # Start/list/stop/view (vars for path/choice)
 │   │   └── templates/
-│   │       └── fim_session.j2         # Session dir template
-│   ├── ntp_broadcast/                 # From ntp_broadcast.sh (integrated into playbook)
+│   │       └── fim_session.j2
+│   ├── firewall_hardening/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       └── main.yml               # iptables firewall rules
+│   ├── honeypot_manager/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── handlers/
+│   │   │   └── main.yml
 │   │   ├── tasks/
-│   │   │   └── main.yml               # Server/client setup
-│   │   └── files/
-│   │       └── ntp_servers.txt        # Default servers file
-│   ├── powershell_install/            # From InstallPowerShell.sh
-│   │   ├── tasks/
-│   │   │   └── main.yml               # Install/uninstall/verify
-│   │   └── vars/
-│   │       └── main.yml               # DISTRO detection
-│   ├── tshark_tools/                  # From Tshark scripts
-│   │   ├── tasks/
-│   │   │   ├── scanner.yml            # Capture/read/filter
-│   │   │   └── analyzer.yml           # HTTP/DNS/port/IP/TCP/creds
-│   │   └── vars/
-│   │       └── main.yml               # Interface, filter type
-│   ├── system_enum/                   # From system_enumerator.sh
-│   │   ├── tasks/
-│   │   │   └── main.yml               # Overview/users/network/etc. via vars
+│   │   │   ├── honeypot_manager_tasks_main.yml
+│   │   │   └── main.yml               # Install/uninstall/adjust Endlessh
 │   │   └── templates/
-│   │       └── enum_report.j2         # Report template
-│   ├── honeypot_manager/              # From Honeypot.sh
+│   │       └── endlessh.service.j2
+│   ├── ids_manager/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── handlers/
+│   │   │   └── main.yml
 │   │   ├── tasks/
-│   │   │   └── main.yml               # Install/uninstall/adjust/export
+│   │   │   ├── ids_manager_tasks_main.yml
+│   │   │   └── main.yml               # Suricata IDS/IPS install/config
 │   │   └── templates/
-│   │       └── endlessh.service.j2    # Systemd unit
-│   └── ids_manager/                   # From IDS.sh
-│       ├── tasks/
-│       │   └── main.yml               # Install/uninstall/adjust (IDS/IPS)
-│       └── templates/
-│           └── suricata.yaml.j2       # Config template
+│   │       └── suricata.yaml.j2
+│   ├── nmap_scanner/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       ├── nmap_scanner_tasks_main.yml
+│   │       └── main.yml               # Network scans (aggressive/vuln/os)
+│   ├── ntp_broadcast/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── files/
+│   │   │   └── ntp_servers.txt
+│   │   ├── handlers/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       ├── ntp_broadcast_tasks_main.yml
+│   │       └── main.yml               # Chrony NTP server/client
+│   ├── powershell_install/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── tasks/
+│   │   │   ├── powershell_install_tasks_main.yml
+│   │   │   └── main.yml               # Install/uninstall/verify PowerShell
+│   │   └── vars/
+│   │       └── powershell_install_vars_main.yml
+│   ├── rootkit_scanner/               # NEW: Rootkit detection tools
+│   │   ├── defaults/
+│   │   │   └── main.yml               # scan_dir, action, tools, scheduling
+│   │   └── tasks/
+│   │       └── main.yml               # rkhunter + chkrootkit install/scan/update
+│   ├── subnet_ping/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   └── tasks/
+│   │       └── main.yml               # Subnet discovery via ping sweep
+│   ├── system_enum/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── tasks/
+│   │   │   └── main.yml               # System enumeration (users/network/etc)
+│   │   └── templates/
+│   │       └── enum_report.j2
+│   ├── tshark_tools/
+│   │   ├── defaults/
+│   │   │   ├── main.yml
+│   │   │   └── packages.yml
+│   │   ├── tasks/
+│   │   │   ├── main.yml
+│   │   │   ├── tshark_tools_tasks_analyzer.yml
+│   │   │   └── tshark_tools_tasks_scanner.yml
+│   │   └── vars/
+│   │       └── tshark_tools_vars_main.yml
+│   ├── user_audit/
+│   │   └── tasks/
+│   │       └── main.yml               # User account auditing
+│   ├── vpn_manager/
+│   │   ├── defaults/
+│   │   │   └── main.yml
+│   │   ├── handlers/
+│   │   │   └── main.yml
+│   │   ├── tasks/
+│   │   │   ├── install_openvpn.yml
+│   │   │   ├── install_softether.yml
+│   │   │   ├── install_wireguard.yml
+│   │   │   ├── main.yml
+│   │   │   └── remove.yml
+│   │   ├── tasks_install/
+│   │   │   └── vpn_install_tasks_main.yml
+│   │   ├── tasks_remove/
+│   │   │   └── vpn_removal_tasks_main.yml
+│   │   └── templates/
+│   │       ├── openvpn_server.conf.j2
+│   │       ├── vpnserver.service.j2
+│   │       └── wg0.conf.j2
+│   └── xrdp_server/
+│       ├── defaults/
+│       │   └── main.yml
+│       └── tasks/
+│           └── main.yml               # XRDP remote desktop install
 └── playbooks/                         # Main playbooks
-    ├── vpn_install.yml                # Existing (integrated)
-    ├── vpn_removal.yml                # Existing (integrated)
-    ├── ntp_broadcast.yml              # New: From ntp_broadcast.sh
-    ├── subnet_ping.yml                # New: From SubnetAndPingConfigs.sh
-    ├── system_enum.yml                # New: From system_enumerator.sh
-    └── liaison_main.yml               # ULTIMATE: Main orchestrator (prompts for tool)
+    ├── liaison_main.yml               # ULTIMATE: Main orchestrator (prompts for tool)
+    ├── ntp_broadcast.yml
+    ├── subnet_ping.yml
+    ├── system_enum.yml
+    ├── uninstall_tools.yml
+    ├── vpn_install.yml
+    └── vpn_removal.yml
