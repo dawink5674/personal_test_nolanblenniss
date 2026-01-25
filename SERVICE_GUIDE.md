@@ -861,17 +861,40 @@ crontab -l | grep -v "rkhunter\|chkrootkit" | crontab -
 
 ## System Tools
 
-### NTP (Chrony)
+### NTP (Chrony) - Hub-and-Spoke Architecture
 
-**Installation:**
+> **CCDC Resilience:** Master server (172.20.242.104) becomes Stratum 10 Orphan when internet is cut, ensuring all clients continue to sync time even during Red Team attacks.
+
+**Architecture:**
+- **Master:** Ubuntu Ecom (172.20.242.104) — Syncs to internet when available, becomes authoritative when disconnected
+- **Clients:** All other Linux hosts — Sync ONLY to Master (no public pool dependency)
+
+**Deploy Entire NTP Infrastructure:**
 ```bash
-ansible-playbook playbooks/liaison_main.yml -e tool=ntp
+# Configure both Master and all Clients
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp -K
+```
+
+**Deploy Master Only:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp --limit ntp_servers -K
+```
+
+**Deploy Clients Only:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp --limit ntp_clients -K
+```
+
+**Remove NTP Configuration:**
+```bash
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp -e ntp_action=remove -K
 ```
 
 **Manage Chrony Service:**
 ```bash
-# Start Chrony
-sudo systemctl start chrony
+# Start Chrony (Debian: chrony, RedHat: chronyd)
+sudo systemctl start chrony      # Debian/Ubuntu
+sudo systemctl start chronyd     # Fedora/Oracle Linux
 
 # Stop Chrony
 sudo systemctl stop chrony
@@ -883,25 +906,59 @@ sudo systemctl restart chrony
 sudo systemctl status chrony
 ```
 
-**Chrony Commands:**
+**Verify Master Configuration:**
 ```bash
-# View time sources
-chronyc sources
-
-# View detailed source info
+# Check upstream sources (should show pool.ntp.org when internet available)
 chronyc sources -v
 
-# View tracking (sync status)
+# Check if Orphan Mode is active (Stratum 10 when disconnected)
 chronyc tracking
 
-# View activity
-chronyc activity
+# View connected clients
+chronyc clients
+```
 
-# Force sync now
+**Verify Client Configuration:**
+```bash
+# Should show ONLY 172.20.242.104 as source
+chronyc sources
+
+# Check sync status (Reference ID should be Master's IP)
+chronyc tracking | grep "Reference ID"
+```
+
+**Force Immediate Time Sync:**
+```bash
+# Step clock immediately (useful after boot or long disconnect)
 sudo chronyc makestep
 
-# View clients (on server)
-chronyc clients
+# Check sync status
+chronyc tracking
+```
+
+**Configuration Files:**
+```bash
+# Master config
+sudo cat /etc/chrony/chrony.conf
+# Key settings: local stratum 10 orphan, allow 172.20.0.0/16
+
+# Client config
+sudo cat /etc/chrony/chrony.conf
+# Key setting: server 172.20.242.104 iburst prefer
+```
+
+**Switching Master/Client Roles:**
+1. Edit `inventory/inventory.ini` — Move hosts between `[ntp_servers]` and `[ntp_clients]`
+2. Update `group_vars/all.yml` — Set `ntp_master_ip` to new Master's IP
+3. Re-run playbook: `ansible-playbook playbooks/liaison_main.yml -e tool=ntp -K`
+
+**View Logs:**
+```bash
+# Chrony logs
+sudo tail -f /var/log/chrony/tracking.log
+
+# Ansible verification log
+cat /var/log/liaison/ntp_verify.log
 ```
 
 ---
