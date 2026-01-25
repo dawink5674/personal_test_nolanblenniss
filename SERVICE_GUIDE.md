@@ -947,7 +947,34 @@ sudo cat /etc/chrony/chrony.conf
 # Key setting: server 172.20.242.104 iburst prefer
 ```
 
-**Switching Master/Client Roles:**
+**Switching Master/Client Roles (Interactive Script):**
+```bash
+# Run the NTP Manager interactive menu
+chmod +x scripts/ntp_manager.sh
+./scripts/ntp_manager.sh
+```
+
+Menu options:
+1. Show current NTP configuration
+2. Change NTP Master (updates inventory.ini + group_vars/all.yml)
+3. Deploy NTP (run playbook)
+4. Show runtime override commands
+5. Exit
+
+**Runtime Override (No File Changes):**
+```bash
+# Temporarily make Splunk the Master (one-time, not persistent)
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp \
+  -e ntp_master_ip=172.20.242.20 \
+  --limit splunk,fedora_webmail,ubuntu_ecom -K
+
+# Temporarily make Fedora the Master
+ansible-playbook playbooks/liaison_main.yml -e tool=ntp \
+  -e ntp_master_ip=172.20.242.101 \
+  --limit splunk,fedora_webmail,ubuntu_ecom -K
+```
+
+**Manual Role Switch (Edit Files):**
 1. Edit `inventory/inventory.ini` — Move hosts between `[ntp_servers]` and `[ntp_clients]`
 2. Update `group_vars/all.yml` — Set `ntp_master_ip` to new Master's IP
 3. Re-run playbook: `ansible-playbook playbooks/liaison_main.yml -e tool=ntp -K`

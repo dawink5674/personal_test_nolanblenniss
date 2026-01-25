@@ -137,7 +137,7 @@ Non-VPN notes:
 - Subnet: `nmap -sn` sweep; requires nmap on target.
 - Nmap: modes via `nmap_type` (port/service/os/vuln/aggressive/sn) and `nmap_target`.
 - FIM: `fim_choice` controls action; baseline/logs stored under `/tmp/fim_sessions`.
-- NTP: chrony templated; uses `ntp_servers`/`ntp_clients` groups and chrony templates in `templates/`; set `ntp_action=remove` to stop and uninstall chrony.
+- NTP: chrony Hub-and-Spoke architecture; uses `ntp_servers`/`ntp_clients` groups; **use `scripts/ntp_manager.sh` to switch Master**; set `ntp_action=remove` to uninstall.
 - PowerShell: Ubuntu/Debian path; set `powershell_action=remove` for uninstall.
 - TShark: capture/read/filter; requires tshark package present.
 - System: writes enum report under `{{ liaison_log_dir }}/enum`.
