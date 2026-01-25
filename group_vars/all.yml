@@ -1,16 +1,20 @@
 ---
-# MWCCDC Common Vars (2025 Team Pack)
+# MWCCDC Common Vars (2025 Midwest Invitational Team Pack)
 vpn_internal_net: 172.20.242.0/24
-dns_server: 172.20.242.102
+dns_server: 172.20.242.20           # Splunk (Oracle Linux)
 ufw_enabled: true
 liaison_log_dir: /var/log/liaison
+
+# NTP Hub-and-Spoke Architecture
+ntp_master_ip: 172.20.242.104       # Ubuntu Ecom (NTP Master)
+ntp_allow_network: 172.20.0.0/16    # All CCDC subnets can sync
 
 # VPN
 openvpn_port: 1194
 openvpn_proto: udp
 openvpn_dev: tun
 openvpn_server_net: 10.8.0.0 255.255.255.0
-openvpn_bind_ip: 172.20.242.104
+openvpn_bind_ip: 172.20.242.104     # Ubuntu Ecom hosts VPN
 
 wg_interface: wg0
 wg_address: 10.0.0.1/24
