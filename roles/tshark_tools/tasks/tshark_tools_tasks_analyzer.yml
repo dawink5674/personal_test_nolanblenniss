@@ -7,7 +7,7 @@
     filter_expr: >-
       {% if tshark_filter == 'http' %}http
       {% elif tshark_filter == 'dns' %}dns
-      {% elif tshark_filter == 'port' %}'tcp.port == {{ port | default(80) }}'
+      {% elif tshark_filter == 'port' %}'tcp.port == {{ tshark_target_port | default(80) }}'
       {% elif tshark_filter == 'tcp_syn' %}'tcp.flags.syn == 1'
       {% elif tshark_filter == 'creds' %}'http contains "password"'
       {% else %}{{ tshark_filter }}{% endif %}
