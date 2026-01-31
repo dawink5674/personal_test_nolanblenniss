@@ -93,7 +93,7 @@
     - name: Compile SoftEther (accept license)
       shell: |
         cd {{ softether_source }}
-        echo -e "1\n1\n1" | make
+        echo -e "1\n1\n1" | make -j$(nproc)
       become: no
       when:
         - not softether_installed.stat.exists
