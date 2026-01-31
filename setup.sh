@@ -85,6 +85,10 @@ fi
 echo "[INFO] Installing Ansible collections..."
 $GALAXY collection install ansible.posix community.general community.docker --force
 
+# Install Python dependencies for Docker modules
+echo "[INFO] Installing Python dependencies for Docker..."
+pip3 install requests docker
+
 echo ""
 echo "=== Setup Complete ==="
 echo "Run playbooks from this directory so ansible.cfg is picked up."
