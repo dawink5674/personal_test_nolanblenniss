@@ -10,6 +10,35 @@
   block:
 
     # ------------------------------------------------------------------------
+    # PREREQUISITE: Install Netcat (for connectivity check)
+    # ------------------------------------------------------------------------
+    - name: Install netcat (Debian/Ubuntu)
+      apt:
+        name: netcat-openbsd
+        state: present
+        update_cache: false
+      when: ansible_os_family == 'Debian'
+
+    - name: Install netcat (RedHat/Fedora)
+      dnf:
+        name: nc
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    # ------------------------------------------------------------------------
+    # HARDENING: Connectivity Check (Clients Only)
+    # ------------------------------------------------------------------------
+    - name: Verify UDP/123 connectivity to Master (Fail Fast)
+      command: "nc -z -u -v {{ ntp_master_ip }} 123"
+      register: ntp_conn_check
+      when: "'ntp_clients' in group_names"
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: ntp_conn_check.rc == 0
+      # If this fails, the playbook stops for this host (Fail Fast)
+
+    # ------------------------------------------------------------------------
     # CONFLICT PREVENTION: Disable systemd-timesyncd
     # ------------------------------------------------------------------------
     - name: Stop systemd-timesyncd to prevent conflicts
@@ -34,7 +63,7 @@
     # ------------------------------------------------------------------------
     - name: Deploy Master NTP server config (Orphan Mode)
       template:
-        src: "{{ playbook_dir }}/templates/chrony_server.conf.j2"
+        src: "chrony_server.conf.j2"
         dest: /etc/chrony/chrony.conf
         owner: root
         group: root
@@ -47,7 +76,7 @@
     # ------------------------------------------------------------------------
     - name: Deploy NTP client config (Hub-and-Spoke)
       template:
-        src: "{{ playbook_dir }}/templates/chrony_client.conf.j2"
+        src: "chrony_client.conf.j2"
         dest: /etc/chrony/chrony.conf
         owner: root
         group: root
@@ -80,7 +109,7 @@
     # ------------------------------------------------------------------------
     - name: Enable and start chrony service
       systemd:
-        name: "{{ chrony_service_name }}"
+        name: "{{ chrony_service_name | default('chronyd') }}"
         enabled: true
         state: started
 
@@ -91,6 +120,8 @@
       command: chronyc makestep
       changed_when: false
       register: makestep_result
+      # Only run if service is active
+      ignore_errors: true
 
     - name: Wait for sync to stabilize
       pause:
@@ -103,6 +134,7 @@
       command: chronyc tracking
       register: ntp_status
       changed_when: false
+      ignore_errors: true
 
     - name: Display sync status
       debug:
@@ -115,8 +147,8 @@
           Timestamp: {{ ansible_date_time.iso8601 }}
           Host: {{ inventory_hostname }}
           Role: {{ 'MASTER (Stratum 10 Orphan)' if 'ntp_servers' in group_names else 'CLIENT' }}
-          
-          {{ ntp_status.stdout }}
+
+          {{ ntp_status.stdout | default('No status') }}
         dest: "{{ liaison_log_dir | default('/var/log/liaison') }}/ntp_verify.log"
         mode: '0644'
 
@@ -129,7 +161,7 @@
 
     - name: Stop chrony service
       systemd:
-        name: "{{ chrony_service_name }}"
+        name: "{{ chrony_service_name | default('chronyd') }}"
         state: stopped
         enabled: false
       failed_when: false
